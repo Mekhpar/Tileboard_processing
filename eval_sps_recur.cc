@@ -43,11 +43,13 @@ int npeaks_max = 30;
 
   func_fit->SetParLimits(2,par_in[2]-par_in[4]/2.,par_in[2]+par_in[4]/2.);
   func_fit->SetParLimits(1,0.5*par_in[1],1.5*par_in[1]);
+  //func_fit->SetParLimits(1,0.5*par_in[1],1.2*par_in[1]);
   int n_peaks_found = par_in[0];
  for(int i=0;i<n_peaks_found;i++)
  {
   func_fit->SetParLimits(2*i+3,0.8*par_in[2*i+3],1.5*par_in[2*i+3]);
   func_fit->SetParLimits(2*i+4,0.1*par_in[2*i+4],3*par_in[2*i+4]);
+  //func_fit->SetParLimits(2*i+4,0.1*par_in[2*i+4],1.5*par_in[2*i+4]);
  }
     
  }
@@ -57,7 +59,7 @@ void eval_sps_recur(int chan,int half_board, int phase)
 {
 
  //TFile *f = new TFile(Form("Tileboard_files/Oct_02/UMD_5800mV/sampling_scan%i.root",phase));
- TFile *f = new TFile("Tileboard_files/46V_LED_scan/sampling_scan9.root");
+ TFile *f = new TFile("Tileboard_files/47V_LED_scan/sampling_scan9.root");
  TTree *hgcroc = (TTree *)f->Get("unpacker_data/hgcroc");
   TCanvas *c1 = new TCanvas("c1","Graph Draw Options", 200,10,600,400); //represents coordinates of start and end points of canvas
 
@@ -74,12 +76,13 @@ void eval_sps_recur(int chan,int half_board, int phase)
  TH1F* hist_1 = new TH1F("hist_1",hist_string.c_str(), 1000, 0, 1000); //Shifting by 1 ADC count for DNL correction 
  (hgcroc)->Draw("adc>>hist",cutch && cuthalf && cut_corr);
  (hgcroc)->Draw("adc+1>>hist_1",cutch && cuthalf && cut_corr); //Effectively shifting the histogram to the right by one bin
+ ///*
  hist->Add(hist_1);
  for(int xbins=0;xbins<hist->GetXaxis()->GetNbins();xbins++)
  {
   hist->SetBinContent(xbins+1,hist->GetBinContent(xbins+1)/2.);
  }
-
+ //*/
  hist->Draw("");
 
 
@@ -111,17 +114,36 @@ void eval_sps_recur(int chan,int half_board, int phase)
   std::cout << "x position of peak " << p << " is " << x_pos[p] << " y position of peak " << p << " is " << y_hgt[p] << std::endl;
  }
  
- //Background subtraction for peaks which initially have weird fits
- ///*
- hist->GetXaxis()->SetRange(x_pos[0]-0.5,x_pos[nfound-1]+1.5*2.0);
- TH1 *bkg = peakFind->Background(hist, 40, "nosmoothing");
- hist->Add(bkg,-1.);
- nfound = peakFind->Search(hist,2);
- std::cout << "Found new " << nfound << " peaks in the sps" << std::endl;
- //*/
+ Double_t gain_1 = x_pos[1]-x_pos[0];
+ Double_t gain_2 = x_pos[2]-x_pos[1];
+ Double_t gain_3 = x_pos[3]-x_pos[2];
+
 
  //Double_t par_x_y_s[3*nfound]; //Each peak has x center of the gaussian, the amplitude corresponding to the center, and the standard deviation
- Double_t gain_init = (x_pos[nfound-1]-x_pos[0])/(nfound-1);//initial guess of gain
+
+ //Double_t gain_init = (x_pos[nfound-1]-x_pos[0])/(nfound-1);//initial guess of gain - DO NOT USE THIS - THE SPACING BETWEEN SOME OF THE LAST PEAKS IS QUITE HIGH!!!
+
+ Double_t gain_init = gain_1;//modified initial guess of gain, this is according to Malinda's code
+
+
+ if(nfound>4)
+ {
+  if(gain_3 <= gain_2 && gain_3 <= gain_1)
+  {
+   gain_init = gain_3;
+  }
+  else if(gain_2 <= gain_3 && gain_2 <= gain_1)
+  {
+   gain_init = gain_2;
+  }
+  else if(gain_1 <= gain_2 && gain_1 <= gain_3)
+  {
+   gain_init = gain_1;
+  }
+
+ }
+
+ std::cout << "Initial guess for gain " << gain_init << std::endl;
  Double_t par_x_y_s[2*nfound+3];
  par_x_y_s[0] = nfound;
  par_x_y_s[1] = gain_init;
@@ -130,6 +152,7 @@ void eval_sps_recur(int chan,int half_board, int phase)
  {
    par_x_y_s[2*i+3] = y_hgt[i];
    par_x_y_s[2*i+4] = gain_init/5;
+   //par_x_y_s[2*i+4] = gain_init/10;
  }
 
   int par_size = sizeof(par_x_y_s)/sizeof(Double_t);
@@ -176,6 +199,10 @@ void eval_sps_recur(int chan,int half_board, int phase)
   hist->Draw("same");
   hist->GetXaxis()->SetTitle("ADC counts");
   hist->SetStats(0);
+  /*
+  bkg->Draw("same");
+  bkg->SetLineColor(kGreen);
+  */
   auto legend = new TLegend (.6, .8, .9, .9);
   
   legend->AddEntry(hist,Form("Gain = %f",fit_pars[1]),"");
@@ -184,11 +211,29 @@ void eval_sps_recur(int chan,int half_board, int phase)
 
   legend->SetTextSize(0.02);
   legend->Draw();
+  string Root_file_string = "Root_fit_files/47V_LED_scan/Ch_"+std::to_string(chan)+"_hf_"+std::to_string(half_board)+".root";
+  TFile *file = TFile::Open(Root_file_string.c_str(),"recreate");
+  TTree *Fit_param = new TTree("Fit_param","Fit parameter values");
+  Fit_param->Print();
+   
+  float values, val_errors;
+  Fit_param->Branch("Values", &(values),2*nfound+3);
+  Fit_param->Branch("Val_errors", &(val_errors),2*nfound+3);
   
-  /*
-  string Entry_index_time_gen = "SPS_Fit_Plots/Jan_22_1855/UMD Channel " + std::to_string(chan) + " half " + std::to_string(half_board) + " phase " + std::to_string(phase) + " fitting of sps.pdf";
+  for(int i=0;i<2*nfound+3;i++)
+  {
+   values = fit_final->GetParameter(i);
+   val_errors = fit_final->GetParError(i);
+   Fit_param->Fill();
+  }
+
+  Fit_param->Print();
+  Fit_param->Write();
+
+  ///*
+  string Entry_index_time_gen = "SPS_Fit_Plots/47V_LED_scan/UMD Channel " + std::to_string(chan) + " half " + std::to_string(half_board) + " phase " + std::to_string(phase) + " fitting of sps.pdf";
   c1 -> Print(Entry_index_time_gen.c_str()); //Copy canvas to pdf
   c1->Close();
   gApplication->Terminate();
-  */
+  //*/
 }
