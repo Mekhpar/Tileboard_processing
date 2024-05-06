@@ -148,6 +148,13 @@ class i2cController(zmqController):
         adc = yaml.safe_load(rep)
         return( adc )
 
+    def read_convert(self,out_dir=0, variable_name = "", adc_pin = 0, bit_val = 4095, numerator = 1, denominator = 1, round_off = 1):
+        ADC = self.read_gbtsca_adc(adc_pin)
+        converted_value = round(float(ADC)/bit_val*numerator/denominator, round_off)
+        print(variable_name," = ", str(converted_value))
+        out_dir.write(variable_name + ": " + str(converted_value) + '\n')
+        
+
     def meas_temp_bias(self,out_dir,A_T,B_T,R0): #individual functions are already available but this is something we might need frequently
         SCA_ADC_range = range(0, 8)
         for sca_adc in SCA_ADC_range: #8 temperatures
@@ -171,7 +178,6 @@ class i2cController(zmqController):
         print("LED_BIAS = ", str(LED_BIAS))
         out_dir.write("LED_BIAS: " + str(LED_BIAS) + '\n')
         
-
     def addMaskedDetId(self,detid):
         self.maskedDetIds.append(detid)
 
