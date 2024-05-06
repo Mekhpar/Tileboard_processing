@@ -257,30 +257,12 @@ def read_sca_config(i2csocket,daqsocket, clisocket, basedir,device_name,tileboar
     print("LED_ON_OFF (1: ON): ", hex((SCA_IOS & 0x00000080)>>7))
     fout.write("LED_ON_OFF: " + str(hex((SCA_IOS & 0x00000080)>>7)) + '\n')
 
-    print("LED_DISABLE1 (1: OFF): ", hex((SCA_IOS & 0x00000100)>>8))
-    fout.write("LED_DISABLE1: " + str(hex((SCA_IOS & 0x00000100)>>8)) + '\n')
-
-    print("LED_DISABLE2 (1: OFF): ", hex((SCA_IOS & 0x00000200)>>9))
-    fout.write("LED_DISABLE2: " + str(hex((SCA_IOS & 0x00000200)>>9)) + '\n')
-
-    print("LED_DISABLE3 (1: OFF): ", hex((SCA_IOS & 0x00000400)>>10))
-    fout.write("LED_DISABLE3: " + str(hex((SCA_IOS & 0x00000400)>>10)) + '\n')
-
-    print("LED_DISABLE4 (1: OFF): ", hex((SCA_IOS & 0x00000800)>>11))
-    fout.write("LED_DISABLE4: " + str(hex((SCA_IOS & 0x00000800)>>11)) + '\n')
-
-    print("LED_DISABLE5 (1: OFF): ", hex((SCA_IOS & 0x00001000)>>12))
-    fout.write("LED_DISABLE5: " + str(hex((SCA_IOS & 0x00001000)>>12)) + '\n')
-
-    print("LED_DISABLE6 (1: OFF): ", hex((SCA_IOS & 0x00002000)>>13))
-    fout.write("LED_DISABLE6: " + str(hex((SCA_IOS & 0x00002000)>>13)) + '\n')
-
-    print("LED_DISABLE7 (1: OFF): ", hex((SCA_IOS & 0x00004000)>>14))
-    fout.write("LED_DISABLE7: " + str(hex((SCA_IOS & 0x00004000)>>14)) + '\n')
-
-    print("LED_DISABLE8 (1: OFF): ", hex((SCA_IOS & 0x00008000)>>15))
-    fout.write("LED_DISABLE8: " + str(hex((SCA_IOS & 0x00008000)>>15)) + '\n')
-
+    for i in range(1,9):
+        bit_pos = 0x00000100*(2**(i-1))
+        print(hex(bit_pos))
+        print("LED_DISABLE",i," (1: OFF): ", hex((SCA_IOS & bit_pos)>>i+7))
+        fout.write("LED_DISABLE"+str(i)+": " + str(hex((SCA_IOS & bit_pos)>>i+7)) + '\n')
+    
     print("EN_HV0 (ALDOV2 BV1 (1: ON): ", hex((SCA_IOS & 0x00100000)>>20))
     fout.write("EN_HV0: " + str(hex((SCA_IOS & 0x00100000)>>20)) + '\n')
 
