@@ -11,14 +11,14 @@ A_T = 3.9083e-3
 B_T = -5.7750e-7
 R0 = 1000
 
-def scan(i2csocket, daqsocket, calibreq, startBX, stopBX, stepBX, startPhase, stopPhase, stepPhase, trimstart, trimstop, trimstep, injectedChannels, odir):
+def scan(i2csocket, daqsocket, gain, calib, calibreq, startBX, stopBX, stepBX, startPhase, stopPhase, stepPhase, trimstart, trimstop, trimstep, injectedChannels, odir):
     testName='sampling_scan'
-
+    print("Calib and gain values taken by scan", calib, gain)
     index=0
 #=============================================added for sampling scan ext======================
 # added for ROCv3 configuration ------------------------
-    my_calib=0
-    gain=1
+    #calib=0
+    #gain=1
     
     # pre-configure the injection
     
@@ -32,9 +32,8 @@ def scan(i2csocket, daqsocket, calibreq, startBX, stopBX, stepBX, startPhase, st
     #===============================================================================
 
     for trim_val in range(trimstart, trimstop, trimstep):
-   
         print("Marke 1")
-        i2csocket.trim_val_configure(trim_val,my_calib,gain,injectedChannels)
+        i2csocket.configure_injection(trim_val = trim_val, process = 'ext', calib_preamp = calib, calib_conv = 0, gain = gain,injectedChannels = injectedChannels, IntCtest = 0, choice_cinj = 1, cmd_120p = 0, L_g2 = 0, H_g2 = 0, L_g1 = 0, H_g1 = 0, L_g0 = 0, H_g0 = 0)
         
         for BX in range(startBX, stopBX, stepBX):
             daqsocket.daq_sampling_scan_settings(active_menu = 'calibAndL1A', num_events = 2500, calibType = 'CALPULEXT', lengthCalib = 4, lengthL1A = 1, bxCalib = calibreq, bxL1A = BX, prescale = 15, repeatOffset = 0)
@@ -76,8 +75,6 @@ def sampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, device_ty
     print("StopBX: ",stopBX)
     
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    voltages = injectionConfig['OV']#-----------added for sampling scan ext
-    LEDvolt = injectionConfig['LEDvolt']#------------added for sampling scan ext
     odir = misc_func.mkdir(basedir,device_name,device_type,testName,suffix)    
         
     mylittlenotifier = myinotifier.mylittleInotifier(odir=odir)
@@ -88,20 +85,18 @@ def sampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, device_ty
     
     daqsocket.daq_sampling_scan_settings(active_menu = 'calibAndL1A',num_events = 2500, calibType = 'CALPULEXT', lengthCalib = 1, lengthL1A = 1, bxCalib = calibreq, bxL1A = 20, prescale = 0, repeatOffset = 0) #Some settings like BXL1A = 20 are generalized here and will be overriden the scan loop later
 
+    (gain, calib, injectedChannels, voltages, LEDvolt) = misc_func.injection_config_assign_external(injectionConfig) #Constructor of sorts for the external injection case
     print("gain = %i" %injectionConfig['gain'])
     print("calib = %i" %injectionConfig['calib'])
-    gain = injectionConfig['gain'] # 0 for low range ; 1 for high range
-    calib = injectionConfig['calib'] # 
-
-    injectedChannels=injectionConfig['injectedChannels']
 
     util.saveFullConfig(odir=odir,i2c=i2csocket,daq=daqsocket,cli=clisocket)
 
-    i2csocket.configure_injection(injectedChannels, activate=0, gain=gain, phase=0, calib_dac=calib)
+    #i2csocket.configure_injection(injectedChannels, activate=0, gain=gain, phase=0, calib_dac=calib)
+    i2csocket.configure_injection(trim_val = 0, process = 'ext', calib_preamp = calib, calib_conv = 0, gain=gain,injectedChannels=injectedChannels, IntCtest = 0, choice_cinj = 1, cmd_120p = 0, L_g2 = 0, H_g2 = 0, L_g1 = 0, H_g1 = 0, L_g0 = 0, H_g0 = 0)
 
     clisocket.start()
     mylittlenotifier.start()
-    scan(i2csocket=i2csocket, daqsocket=daqsocket, calibreq = calibreq, startBX=startBX, stopBX=stopBX, stepBX=1, startPhase=0, stopPhase=15, stepPhase=1, trimstart=0, trimstop=1, trimstep=1, injectedChannels=injectedChannels, odir=odir)
+    scan(i2csocket=i2csocket, daqsocket=daqsocket, gain = gain, calib = calib, calibreq = calibreq, startBX=startBX, stopBX=stopBX, stepBX=1, startPhase=0, stopPhase=15, stepPhase=1, trimstart=0, trimstop=1, trimstep=1, injectedChannels=injectedChannels, odir=odir)
     print("scan finish")
     mylittlenotifier.stop()
     print("mylittlenotifier stop")
@@ -120,7 +115,8 @@ def sampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, device_ty
         scan_analyzer.determine_bestPhase(injectedChannels)
 
         # return to no injection setting
-        i2csocket.configure_injection(injectedChannels,activate=0,calib_dac=0,gain=0) # 14 is the best phase -> might need to extract it from analysis
+        #i2csocket.configure_injection(injectedChannels,activate=0,calib_dac=0,gain=0) # 14 is the best phase -> might need to extract it from analysis
+        i2csocket.configure_injection(trim_val = 0, process = 'ext', calib_preamp = 0, calib_conv = 0, gain=0,injectedChannels=injectedChannels, IntCtest = 0, choice_cinj = 1, cmd_120p = 0, L_g2 = 0, H_g2 = 0, L_g1 = 0, H_g1 = 0, L_g0 = 0, H_g0 = 0)
 
         with open(odir+'/best_phase.yaml') as fin:
             cfg = yaml.safe_load(fin)
@@ -134,7 +130,10 @@ def sampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, device_ty
 
 
 if __name__ == "__main__":
-    options = misc_func.options_run()#This will be constant for every test irrespective of the type of test
+    parser = misc_func.options_run()#This will be constant for every test irrespective of the type of test
+    (options, args) = parser.parse_args()
+    print(options)
+    
     (daqsocket,clisocket,i2csocket) = zmqctrl.pre_init(options)
 
     injectionConfig = {
