@@ -77,6 +77,7 @@ def read_sca_config(i2csocket,daqsocket, clisocket, basedir,device_name,tileboar
     outdir = odir
     path=outdir
     fout=open(outdir+"TB3_info.txt", "x")
+    print("Text file object type", type(fout))
     fout.write("#  Tileboard3 Slow Control Data" + '\n')
     fout.write("#  Date, Time: " + timestamp + '\n')
 
@@ -189,9 +190,9 @@ def read_sca_config(i2csocket,daqsocket, clisocket, basedir,device_name,tileboar
        fout.write("T" + str(sca_adc) +": "+str(T1) + '\n')
        
     #SiPM bias values (input, Ch 1 and Ch 2)   
-    i2csocket.read_convert(out_dir=fout, variable_name = "MPPC_BIAS_IN", adc_pin = 18, bit_val = 4095, numerator = 330500, denominator = 6490, round_off = 4)
-    i2csocket.read_convert(out_dir=fout, variable_name = "MPPC_BIAS1", adc_pin = 9, bit_val = 4095, numerator = 330500, denominator = 6490, round_off = 4)
-    i2csocket.read_convert(out_dir=fout, variable_name = "MPPC_BIAS2", adc_pin = 10, bit_val = 4095, numerator = 330500, denominator = 6490, round_off = 4)
+    i2csocket.read_convert(out_dir = fout, variable_name = "MPPC_BIAS_IN", adc_pin = 18, numerator = 330500, denominator = 6490, round_off = 4)
+    i2csocket.read_convert(out_dir = fout, variable_name = "MPPC_BIAS1", adc_pin = 9, numerator = 330500, denominator = 6490, round_off = 4)
+    i2csocket.read_convert(out_dir = fout, variable_name = "MPPC_BIAS2", adc_pin = 10, numerator = 330500, denominator = 6490, round_off = 4)
     
     ADC = i2csocket.read_gbtsca_adc(29)
     CURHV0 = round(float(ADC)/4095, 4)
@@ -204,27 +205,27 @@ def read_sca_config(i2csocket,daqsocket, clisocket, basedir,device_name,tileboar
     fout.write("CURHV1: " + str(CURHV1) + '\n')
 
     #Other supplied voltages (tileboard and LED)
-    i2csocket.read_convert(out_dir=fout, variable_name = "VCC_IN", adc_pin = 11, bit_val = 4095, numerator = 60700, denominator = 4700, round_off = 3)
-    i2csocket.read_convert(out_dir=fout, variable_name = "LED_BIAS", adc_pin = 12, bit_val = 4095, numerator = 60700, denominator = 4700, round_off = 3)
+    i2csocket.read_convert(out_dir = fout, variable_name = "VCC_IN", adc_pin = 11, numerator = 60700, denominator = 4700, round_off = 3)
+    i2csocket.read_convert(out_dir = fout, variable_name = "LED_BIAS", adc_pin = 12, numerator = 60700, denominator = 4700, round_off = 3)
     
     #Chip input voltages (from the ALDO)
-    i2csocket.read_convert(out_dir=fout, variable_name = "VPA (HGCROC -> +2.5V)", adc_pin = 13, bit_val = 4095, numerator = 4000, denominator = 1000, round_off = 3)
-    i2csocket.read_convert(out_dir=fout, variable_name = "VCC_GBTSCA (+1.5V)", adc_pin = 8, bit_val = 4095, numerator = 2000, denominator = 1000, round_off = 3)
-    i2csocket.read_convert(out_dir=fout, variable_name = "PRE_VPA (around +3.5V)", adc_pin = 14, bit_val = 4095, numerator = 4000, denominator = 1000, round_off = 3)
+    i2csocket.read_convert(out_dir = fout, variable_name = "VPA (HGCROC -> +2.5V)", adc_pin = 13, numerator = 4000, denominator = 1000, round_off = 3)
+    i2csocket.read_convert(out_dir = fout, variable_name = "VCC_GBTSCA (+1.5V)", adc_pin = 8, numerator = 2000, denominator = 1000, round_off = 3)
+    i2csocket.read_convert(out_dir = fout, variable_name = "PRE_VPA (around +3.5V)", adc_pin = 14, numerator = 4000, denominator = 1000, round_off = 3)
     
     #LDO input and output voltages
-    i2csocket.read_convert(out_dir=fout, variable_name = "VDDA (+1.2V)", adc_pin = 15, bit_val = 4095, numerator = 2000, denominator = 1000, round_off = 3)
-    i2csocket.read_convert(out_dir=fout, variable_name = "VDDD (+1.2V)", adc_pin = 16, bit_val = 4095, numerator = 2000, denominator = 1000, round_off = 3)
-    i2csocket.read_convert(out_dir=fout, variable_name = "PRE_VDDA (+1.5V)", adc_pin = 17, bit_val = 4095, numerator = 2000, denominator = 1000, round_off = 3)
+    i2csocket.read_convert(out_dir = fout, variable_name = "VDDA (+1.2V)", adc_pin = 15, numerator = 2000, denominator = 1000, round_off = 3)
+    i2csocket.read_convert(out_dir = fout, variable_name = "VDDD (+1.2V)", adc_pin = 16, numerator = 2000, denominator = 1000, round_off = 3)
+    i2csocket.read_convert(out_dir = fout, variable_name = "PRE_VDDA (+1.5V)", adc_pin = 17, numerator = 2000, denominator = 1000, round_off = 3)
     
     #??
-    i2csocket.read_convert(out_dir=fout, variable_name = "TB_ID0 (+0.2V)", adc_pin = 26, bit_val = 4095, numerator = 1, denominator = 1, round_off = 2)
-    i2csocket.read_convert(out_dir=fout, variable_name = "TB_ID1 (+0.0V)", adc_pin = 27, bit_val = 4095, numerator = 1, denominator = 1, round_off = 2)
+    i2csocket.read_convert(out_dir = fout, variable_name = "TB_ID0 (+0.2V)", adc_pin = 26, numerator = 1, denominator = 1, round_off = 2)
+    i2csocket.read_convert(out_dir = fout, variable_name = "TB_ID1 (+0.0V)", adc_pin = 27, numerator = 1, denominator = 1, round_off = 2)
 
-    i2csocket.read_convert(out_dir=fout, variable_name = "PROBE_DC_L1", adc_pin = 22, bit_val = 4095, numerator = 1, denominator = 1, round_off = 2)
-    i2csocket.read_convert(out_dir=fout, variable_name = "PROBE_DC_L2", adc_pin = 23, bit_val = 4095, numerator = 1, denominator = 1, round_off = 2)
-    i2csocket.read_convert(out_dir=fout, variable_name = "PROBE_DC_R1", adc_pin = 24, bit_val = 4095, numerator = 1, denominator = 1, round_off = 2)
-    i2csocket.read_convert(out_dir=fout, variable_name = "PROBE_DC_R2", adc_pin = 25, bit_val = 4095, numerator = 1, denominator = 1, round_off = 2)
+    i2csocket.read_convert(out_dir = fout, variable_name = "PROBE_DC_L1", adc_pin = 22, numerator = 1, denominator = 1, round_off = 2)
+    i2csocket.read_convert(out_dir = fout, variable_name = "PROBE_DC_L2", adc_pin = 23, numerator = 1, denominator = 1, round_off = 2)
+    i2csocket.read_convert(out_dir = fout, variable_name = "PROBE_DC_R1", adc_pin = 24, numerator = 1, denominator = 1, round_off = 2)
+    i2csocket.read_convert(out_dir = fout, variable_name = "PROBE_DC_R2", adc_pin = 25, numerator = 1, denominator = 1, round_off = 2)
 
     ########################   GPIOs    ####################
 
@@ -319,7 +320,15 @@ def read_sca_config(i2csocket,daqsocket, clisocket, basedir,device_name,tileboar
 
 
 if __name__ == "__main__":
-    options = misc_func.options_run()#This will be constant for every test irrespective of the type of test
+    parser = misc_func.options_run()#This will be constant for every test irrespective of the type of test
+    
+    #Two extra options custommade just for this slow control script
+    parser.add_option("-b","--tileboard", action="store", dest="tileboard",default='TB2.1_3', help="tileboard in use")
+    parser.add_option("-v","--overvoltage", action="store", dest="OV",default='2V', help="overvoltage to be used")
+
+    (options, args) = parser.parse_args()
+    print(options)
+
     (daqsocket,clisocket,i2csocket) = zmqctrl.pre_init(options)
     
     read_sca_config(i2csocket,daqsocket,clisocket,options.odir,options.dut,options.tileboard,options.OV)
