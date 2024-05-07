@@ -185,63 +185,35 @@ class i2cController(zmqController):
     def rmMaskedDetId(self,detid):
         self.maskedDetIds.remove(detid)
 
-    def sipm_configure_injection(self,injectedChannels, activate=0, gain=0, phase=None, calib_dac=0):
-        nestedConf = nested_dict()
-        for key in self.yamlConfig.keys():
-            if key.find('roc_s')==0:
-                nestedConf[key]['sc']['ReferenceVoltage']['all']['IntCtest'] = 0
-                nestedConf[key]['sc']['ReferenceVoltage']['all']['choice_cinj'] = 0
-                if gain < 2:
-                    nestedConf[key]['sc']['ReferenceVoltage']['all']['cmd_120p'] = gain
-                if calib_dac == -1:
-                    nestedConf[key]['sc']['ReferenceVoltage']['all']['Calib_2V5'] = 0
-                else:
-                    nestedConf[key]['sc']['ReferenceVoltage']['all']['Calib_2V5'] = calib_dac
-                if not None==phase: # no default phase, we don't change when not set
-                    nestedConf[key]['sc']['Top']['all']['phase_ck'] = phase
-                if not None==injectedChannels:
-                    for injectedChannel in injectedChannels:
-                        nestedConf[key]['sc']['ch'][injectedChannel]['HighRange'] = activate
-                        nestedConf[key]['sc']['ch'][injectedChannel]['LowRange'] = 0
-        self.configure(yamlNode=nestedConf.to_dict())
-        if not None==phase:
-            self.resettdc()	# Reset MasterTDCs
 
-    def configure_injection(self,injectedChannels, activate=0, gain=0, phase=None, calib_dac=0):
-        nestedConf = nested_dict()
-        for key in self.yamlConfig.keys():
-            if key.find('roc_s')==0:
-                if calib_dac == -1:
-                    nestedConf[key]['sc']['ReferenceVoltage']['all']['IntCtest']=0
-                else:
-                    nestedConf[key]['sc']['ReferenceVoltage']['all']['IntCtest'] = activate
-                    nestedConf[key]['sc']['ReferenceVoltage']['all']['Calib'] = calib_dac
-                if not None==phase: # no default phase, we don't change when not set
-                    nestedConf[key]['sc']['Top']['all']['phase_ck'] = phase
-                for injectedChannel in injectedChannels:
-                    nestedConf[key]['sc']['ch'][injectedChannel]['LowRange'] = 0
-                    nestedConf[key]['sc']['ch'][injectedChannel]['HighRange'] = 0
-                    if gain==0:
-                        nestedConf[key]['sc']['ch'][injectedChannel]['LowRange'] = activate
-                    else:
-                        nestedConf[key]['sc']['ch'][injectedChannel]['HighRange'] = activate
-        self.configure(yamlNode=nestedConf.to_dict())
-        if not None==phase:
-            self.resettdc()	# Reset MasterTDCs
-
-    def trim_val_configure(self,trim_val=0, my_calib_preamp = 0, my_calib_conv = 0, gain=1,injectedChannels=[0,1,2], IntCtest = 0, choice_cinj = 0, cmd_120p = 0, L_g2 = 0, H_g2 = 0, L_g1 = 0, H_g1 = 0, L_g0 = 0, H_g0 = 0): #Here all three conditions for the gain look exactly the same
+    #Very generic function, will cover the other two injections too
+    #sipm_configure_injection = configure_injection(self,trim_val=0, calib_preamp = 0, calib_conv = calib_dac, gain=0,injectedChannels=[0,1,2], IntCtest = 0, choice_cinj = 0, cmd_120p = 0, L_g2 = 0, H_g2 = 1, L_g1 = 0, H_g1 = 1, L_g0 = 0, H_g0 = 1) - there are no lg and hg conditions depending on gain value, cmd_120p is to be set equal to the gain, and this assuming the activate is high (1)
+    
+    #configure_injection = configure_injection(self,trim_val=0, calib_preamp = calib_dac, calib_conv = 0, gain=0,injectedChannels=[0,1,2], IntCtest = 1, choice_cinj = 1 '''This choice is purely based on the value from the preamp injection script''', cmd_120p = 0, L_g2 = 0, H_g2 = 1, L_g1 = 0, H_g1 = 1, L_g0 = 1, H_g0 = 0)
+    
+    
+    def configure_injection(self,trim_val = 0, process = 'int', calib_preamp = 0, calib_conv = 0, gain=1,injectedChannels=[0,1,2], IntCtest = 0, choice_cinj = 0, cmd_120p = 0, L_g2 = 0, H_g2 = 0, L_g1 = 0, H_g1 = 0, L_g0 = 0, H_g0 = 0): #Here all three conditions for the gain look exactly the same
         nestedConf = nested_dict()
         update = lambda conf, chtype, channel, Range, val : conf[chtype][channel].update({Range:val})
         for key in self.yamlConfig.keys():
             if key.find('roc_s')==0:
-                nestedConf[key]['sc']['ReferenceVoltage']['all']['IntCtest'] = IntCtest
-                print("Marke 2")
-                nestedConf[key]['sc']['ReferenceVoltage']['all']['Calib'] = my_calib_preamp
-                nestedConf[key]['sc']['ReferenceVoltage']['all']['Calib_2V5'] = my_calib_conv
+            
+                if calib_preamp == -1 | calib_conv == -1: #Including both because the scope of the function is wider to have both preamp and conveyor injection
+                    nestedConf[key]['sc']['ReferenceVoltage']['all']['IntCtest'] = 0
+                    nestedConf[key]['sc']['ReferenceVoltage']['all']['Calib_2V5'] = 0
+                else:
+                    nestedConf[key]['sc']['ReferenceVoltage']['all']['IntCtest'] = IntCtest
+                    nestedConf[key]['sc']['ReferenceVoltage']['all']['Calib'] = calib_preamp
+                    nestedConf[key]['sc']['ReferenceVoltage']['all']['Calib_2V5'] = calib_conv
                 
-                nestedConf[key]['sc']['ReferenceVoltage']['all']['choice_cinj'] = choice_cinj   # "1": inject to preamp input, "0": inject to conveyor input
-                nestedConf[key]['sc']['ReferenceVoltage']['all']['cmd_120p'] = cmd_120p
-                nestedConf[key]['sc']['ch']['all']['trim_inv'] = trim_val
+                    nestedConf[key]['sc']['ReferenceVoltage']['all']['choice_cinj'] = choice_cinj   # "1": inject to preamp input, "0": inject to conveyor input
+                    nestedConf[key]['sc']['ReferenceVoltage']['all']['cmd_120p'] = cmd_120p
+                    if process == 'ext':
+                        nestedConf[key]['sc']['ch']['all']['trim_inv'] = trim_val
+                    elif process == 'int':
+                        pass #Do nothing, DO NOT set the trim_val
+                        print("Trim_inv value for pedestal not set")
+                            
                 if gain==2:
                     for inj_chs in injectedChannels:
                        [nestedConf[key]['sc']['ch'][inj_chs].update({'LowRange':L_g2}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
