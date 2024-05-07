@@ -3,26 +3,30 @@ from time import sleep
 from nested_dict import nested_dict
 
 import myinotifier,util
+import miscellaneous_functions as misc_func
 import analysis.level0.sampling_scan_analysis as analyzer
 import zmq_controler as zmqctrl
 
-def scan(i2csocket, daqsocket, startBX, stopBX, stepBX, startPhase, stopPhase, stepPhase, injectedChannels, odir):
+def scan(i2csocket, daqsocket, gain, calib, calibreq, startBX, stopBX, stepBX, startPhase, stopPhase, stepPhase, injectedChannels, odir):
     testName='sampling_scan'
 
     index=0
     # added for ROCv3 configuration ------------------------
-    my_calib = injectionConfig['calib']  # when cmd_120p=0, my_calib should be high, >600, to see something
-    gain = injectionConfig['gain']      # do not change when injecting into conveyor: gain=1 (HighRange=1, LowRange=0)
-    nestedConf = nested_dict()
+    #calib = injectionConfig['calib']  # when cmd_120p=0, calib should be high, >600, to see something
+    #gain = injectionConfig['gain']      # do not change when injecting into conveyor: gain=1 (HighRange=1, LowRange=0)
+    #nestedConf = nested_dict()
     # pre-configure the injection
     
     print("Marke 1")
+    i2csocket.configure_injection(trim_val = 0, process = 'int', calib_preamp = 0, calib_conv = calib, gain = gain,injectedChannels = injectedChannels, IntCtest = 0, choice_cinj = 0, cmd_120p = 1, L_g2 = 1, H_g2 = 1, L_g1 = 0, H_g1 = 1, L_g0 = 1, H_g0 = 0)    
+    
+    '''
     update = lambda conf, chtype, channel, Range, val : conf[chtype][channel].update({Range:val})
     for key in i2csocket.yamlConfig.keys():
         if key.find('roc_s')==0:
             nestedConf[key]['sc']['ReferenceVoltage']['all']['IntCtest'] = 0   # IntCtest must be '0' when conveyor injection is used
             print("Key: ", key)
-            nestedConf[key]['sc']['ReferenceVoltage']['all']['Calib_2V5'] = my_calib  # Calib_2V5: Conveyor injection, Calib: preamp injection
+            nestedConf[key]['sc']['ReferenceVoltage']['all']['Calib_2V5'] = calib  # Calib_2V5: Conveyor injection, Calib: preamp injection
             nestedConf[key]['sc']['ReferenceVoltage']['all']['choice_cinj'] = 0   # "1": inject to preamp input, "0": inject to conveyor input
             nestedConf[key]['sc']['ReferenceVoltage']['all']['cmd_120p'] = 1 # cmd_120p=0: Cinj=3pF, cmd_120p=1: Cinj=120pF. Only Conveyor!!
             # nestedConf[key]['sc']['ch']['all']['HighRange'] = 0   # Reset injection first.
@@ -46,13 +50,14 @@ def scan(i2csocket, daqsocket, startBX, stopBX, stepBX, startPhase, stopPhase, s
             else:
                 pass
     i2csocket.configure(yamlNode=nestedConf.to_dict())
+    '''
     
     # --------------------
        
     for BX in range(startBX, stopBX, stepBX):
+        daqsocket.daq_sampling_scan_settings(active_menu = 'calibAndL1A', num_events = 500, calibType = 'CALPULINT', lengthCalib = 1, lengthL1A = 1, bxCalib = calibreq, bxL1A = BX, prescale = 1, repeatOffset = 0)
         
-        # daqsocket.l1a_generator_settings(name='A',enable=1,BX=0x10,length=1,flavor='CALPULINT',prescale=1,followMode='DISABLE')
-        # daqsocket.l1a_generator_settings(name='B',enable=1,BX=BX,length=1,flavor='L1A',prescale=1,followMode='A')
+        '''
         daqsocket.yamlConfig['daq']['menus']['calibAndL1A']['calibType']="CALPULINT"
         daqsocket.yamlConfig['daq']['menus']['calibAndL1A']['lengthCalib']=1
         daqsocket.yamlConfig['daq']['menus']['calibAndL1A']['bxCalib']=0x10
@@ -62,21 +67,12 @@ def scan(i2csocket, daqsocket, startBX, stopBX, stepBX, startPhase, stopPhase, s
         daqsocket.yamlConfig['daq']['menus']['calibAndL1A']['lengthL1A']=1
         daqsocket.yamlConfig['daq']['menus']['calibAndL1A']['bxL1A']=BX
         # daqsocket.yamlConfig['daq']['menus']['calibAndL1A']['prescale']=0
-        
+        '''
         daqsocket.configure()
         print(BX)
 
         for phase in range(startPhase,stopPhase+1,stepPhase):
-            nestedConf = nested_dict()
-            for key in i2csocket.yamlConfig.keys():
-                # if key.find('roc_s')==0 or key.find('roc_s')==1:
-                if key.find('roc_s')==0:
-                    print("Key: ", key)
-                    # nestedConf[key]['sc']['Top']['all']['phase_strobe']=15-phase
-                    nestedConf[key]['sc']['Top']['all']['phase_ck']=phase
-            i2csocket.configure(yamlNode=nestedConf.to_dict())
-            i2csocket.resettdc()	# Reset MasterTDCs
-
+            i2csocket.phase_set(phase)
             util.acquire_scan(daq=daqsocket)
             chip_params = { 'BX' : BX-startBX, 'Phase' : phase }
             util.saveMetaYaml(odir=odir,i2c=i2csocket,daq=daqsocket,
@@ -89,46 +85,12 @@ def scan(i2csocket, daqsocket, startBX, stopBX, stepBX, startPhase, stopPhase, s
                    [nestedConf[key]['sc']['ch'][inj_chs].update({'HighRange':0}) for key in i2csocket.yamlConfig.keys() if key.find('roc_s')==0 ]
     return
 
-def sampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, injectionConfig,suffix=""):
-    if type(i2csocket) != zmqctrl.i2cController:
-        print( "ERROR in pedestal_run : i2csocket should be of type %s instead of %s"%(zmqctrl.i2cController,type(i2csocket)) )
-        sleep(1)
-        return
-
-    if type(daqsocket) != zmqctrl.daqController:
-        print( "ERROR in pedestal_run : daqsocket should be of type %s instead of %s"%(zmqctrl.daqController,type(daqsocket)) )
-        sleep(1)
-        return
-
-    if type(clisocket) != zmqctrl.daqController:
-        print( "ERROR in pedestal_run : clisocket should be of type %s instead of %s"%(zmqctrl.daqController,type(clisocket)) )
-        sleep(1)
-        return
-
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    if suffix:
-        timestamp = timestamp + "_" + suffix
-        
-        
-        
-        
-        
-        
-    odir = "%s/%s/TB3_D8_11/ConvSampling_calib120_TB3_D8_11/" %( os.path.realpath(basedir), device_name) # a comlete path is needed
-    
-    
-    
-    
-    
-    
-    os.makedirs(odir)
+def sampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, device_type, injectionConfig,suffix=""):
+    testName='ConveyorSampling_scan'
+    odir = misc_func.mkdir(basedir,device_name,device_type,testName,suffix)
     
     mylittlenotifier = myinotifier.mylittleInotifier(odir=odir)
     mylittlenotifier.start()
-
-    startPhase=0
-    stopPhase=15
-    stepPhase=1
 
     clisocket.yamlConfig['client']['outputDirectory'] = odir
     clisocket.yamlConfig['client']['run_type'] = "sampling_scan"
@@ -147,7 +109,14 @@ def sampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, injection
     print("StopBX: ",stopBX)
     stepBX=1
     
+    daqsocket.daq_sampling_scan_settings(active_menu = 'calibAndL1A', num_events = 500, calibType = 'CALPULINT', lengthCalib = 1, lengthL1A = 1, bxCalib = calibreq, bxL1A = 20, prescale = 0, repeatOffset = 0)
+    #Some settings like BXL1A = 20 are generalized here and will be overriden the scan loop later
     
+    (gain, calib, injectedChannels) = misc_func.injection_config_assign_internal(injectionConfig) #Constructor of sorts for the internal injection case (both preamp and conveyor)
+    
+    print("gain = %i" %gain)
+    print("calib = %i" %calib)
+    '''    
     daqsocket.yamlConfig['daq']['active_menu']='calibAndL1A'
     daqsocket.yamlConfig['daq']['menus']['calibAndL1A']['NEvents']=500 #-----1000 in original
     daqsocket.yamlConfig['daq']['menus']['calibAndL1A']['bxCalib']=calibreq
@@ -156,7 +125,7 @@ def sampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, injection
     daqsocket.yamlConfig['daq']['menus']['calibAndL1A']['prescale']=0
     daqsocket.yamlConfig['daq']['menus']['calibAndL1A']['repeatOffset']=0 # was 700
     daqsocket.configure()
-    
+    '''
     
   
     
@@ -182,19 +151,13 @@ def sampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, injection
     '''
     print("gain = %i" %injectionConfig['gain'])
     print("calib = %i" %injectionConfig['calib'])
-    gain = injectionConfig['gain'] # 0 for low range ; 1 for high range
-    calib = injectionConfig['calib'] # 
-    injectedChannels=injectionConfig['injectedChannels']
-
     util.saveFullConfig(odir=odir,i2c=i2csocket,daq=daqsocket,cli=clisocket)
 
-    i2csocket.configure_injection(injectedChannels, activate=1, gain=gain, phase=0, calib_dac=calib)
+    #i2csocket.configure_injection(injectedChannels, activate=1, gain=gain, phase=0, calib_dac=calib)
+    i2csocket.configure_injection(trim_val = 0, process = 'int', calib_preamp = calib, calib_conv = 0, gain=gain,injectedChannels=injectedChannels, IntCtest = 1, choice_cinj = 1, cmd_120p = 0, L_g2 = 0, H_g2 = 1, L_g1 = 0, H_g1 = 1, L_g0 = 1, H_g0 = 0)
 
     clisocket.start()
-    scan(i2csocket=i2csocket, daqsocket=daqsocket, 
-	     startBX=startBX, stopBX=stopBX, stepBX=stepBX, 
-	     startPhase=startPhase, stopPhase=stopPhase, stepPhase=stepPhase, 
-	     injectedChannels=injectedChannels, odir=odir)
+    scan(i2csocket=i2csocket, daqsocket=daqsocket, gain = gain, calib = calib, calibreq = calibreq, startBX=startBX, stopBX=stopBX, stepBX=1, startPhase=0, stopPhase=15, stepPhase=1, injectedChannels=injectedChannels, odir=odir)
     clisocket.stop()
     mylittlenotifier.stop()
 
@@ -209,7 +172,11 @@ def sampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, injection
     scan_analyzer.determine_bestPhase(injectedChannels)
 
     # return to no injection setting
-    i2csocket.configure_injection(injectedChannels,activate=1,calib_dac=0,gain=0) # 14 is the best phase -> might need to extract it from analysis
+    #i2csocket.configure_injection(injectedChannels,activate=1,calib_dac=0,gain=0) # 14 is the best phase -> might need to extract it from analysis
+    #Lots of options here are equivalent to the default ones, might as well not write them down explicitly
+    #Why activate = 1 in this case?
+    i2csocket.configure_injection(trim_val = 0, process = 'int', calib_preamp = 0, calib_conv = 0, gain=0,injectedChannels=injectedChannels, IntCtest = 1, choice_cinj = 0, cmd_120p = 0, L_g2 = 0, H_g2 = 1, L_g1 = 0, H_g1 = 1, L_g0 = 1, H_g0 = 0)
+    
 
     with open(odir+'/best_phase.yaml') as fin:
         cfg = yaml.safe_load(fin)
@@ -219,61 +186,18 @@ def sampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, injection
 
 
 if __name__ == "__main__":
-    from optparse import OptionParser
-    parser = OptionParser()
+    parser = misc_func.options_run()#This will be constant for every test irrespective of the type of test
     
-    parser.add_option("-d", "--dut", dest="dut",
-                      help="device under test")
-    
-    parser.add_option("-i", "--hexaIP",
-                      action="store", dest="hexaIP",
-                      help="IP address of the zynq on the hexactrl board")
-    
-    parser.add_option("-f", "--configFile",default="./configs/init.yaml",
-                      action="store", dest="configFile",
-                      help="initial configuration yaml file")
-    
-    parser.add_option("-o", "--odir",
-                      action="store", dest="odir",default='./data',
-                      help="output base directory")
-    
-    parser.add_option("--daqPort",
-                      action="store", dest="daqPort",default='6000',
-                      help="port of the zynq waiting for daq config and commands (configure/start/stop/is_done)")
-    
-    parser.add_option("--i2cPort",
-                      action="store", dest="i2cPort",default='5555',
-                      help="port of the zynq waiting for I2C config and commands (initialize/configure/read_pwr,read/measadc)")
-    
-    parser.add_option("--pullerPort",
-                      action="store", dest="pullerPort",default='6001',
-                      help="port of the client PC (loccalhost for the moment) waiting for daq config and commands (configure/start/stop)")
-                      
-    parser.add_option("-I", "--initialize",default=False,
-                      action="store_true", dest="initialize",
-                      help="set to re-initialize the ROCs and daq-server instead of only configuring")
-    
-    
+    #One extra option custommade just for this script - internal pulse height (calib)
+    parser.add_option("-c","--calib", action="store", dest="calib",default='0', help="pulse height for internal injection")
+ 
     (options, args) = parser.parse_args()
     print(options)
-    
-    daqsocket = zmqctrl.daqController(options.hexaIP,options.daqPort,options.configFile)
-    clisocket = zmqctrl.daqController("localhost",options.pullerPort,options.configFile)
-    i2csocket = zmqctrl.i2cController(options.hexaIP,options.i2cPort,options.configFile)
-    
-    i2csocket.configure()
-
-    #nestedConf = nested_dict()
-    #for key in i2csocket.yamlConfig.keys():
-    #    if key.find('roc_s')==0:
-    #        nestedConf[key]['sc']['ReferenceVoltage']['all']['Toa_vref']=200
-    #        nestedConf[key]['sc']['ReferenceVoltage']['all']['Tot_vref']=500
-    #i2csocket.update_yamlConfig(yamlNode=nestedConf.to_dict())
-    #i2csocket.configure(yamlNode=nestedConf.to_dict())
+    (daqsocket,clisocket,i2csocket) = zmqctrl.pre_init(options)
 
     injectionConfig = {
         'gain' : 1,  # injection to conveyor: Leave gain=1 (HighRange=1, LowRange=0)
         'calib' : 120,
         'injectedChannels' : [6, 49]  # when injecting into conveyor: ONLY ONE Channel per half!
     }
-    sampling_scan(i2csocket,daqsocket,clisocket,options.odir,options.dut,injectionConfig,suffix="")
+    sampling_scan(i2csocket,daqsocket,clisocket,options.odir,options.dut,options.device_type,injectionConfig,suffix="")
