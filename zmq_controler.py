@@ -148,6 +148,7 @@ class i2cController(zmqController):
         adc = yaml.safe_load(rep)
         return( adc )
 
+    #For this set of ADCs the number of bits is always 12, so the maximum value is always 4095
     def read_convert(self,out_dir=0, variable_name = "", adc_pin = 0, bit_val = 4095, numerator = 1, denominator = 1, round_off = 1):
         ADC = self.read_gbtsca_adc(adc_pin)
         converted_value = round(float(ADC)/bit_val*numerator/denominator, round_off)
@@ -228,31 +229,33 @@ class i2cController(zmqController):
         if not None==phase:
             self.resettdc()	# Reset MasterTDCs
 
-    def trim_val_configure(self,trim_val=0, my_calib=0,gain=1,injectedChannels=[0,1,2]): #Here all three conditions for the gain look exactly the same
+    def trim_val_configure(self,trim_val=0, my_calib_preamp = 0, my_calib_conv = 0, gain=1,injectedChannels=[0,1,2], IntCtest = 0, choice_cinj = 0, cmd_120p = 0, L_g2 = 0, H_g2 = 0, L_g1 = 0, H_g1 = 0, L_g0 = 0, H_g0 = 0): #Here all three conditions for the gain look exactly the same
         nestedConf = nested_dict()
         update = lambda conf, chtype, channel, Range, val : conf[chtype][channel].update({Range:val})
         for key in self.yamlConfig.keys():
             if key.find('roc_s')==0:
-                nestedConf[key]['sc']['ReferenceVoltage']['all']['IntCtest'] = 0
+                nestedConf[key]['sc']['ReferenceVoltage']['all']['IntCtest'] = IntCtest
                 print("Marke 2")
-                nestedConf[key]['sc']['ReferenceVoltage']['all']['Calib'] = my_calib
-                nestedConf[key]['sc']['ReferenceVoltage']['all']['choice_cinj'] = 1   # "1": inject to preamp input, "0": inject to conveyor input
-                nestedConf[key]['sc']['ReferenceVoltage']['all']['cmd_120p'] = 0
+                nestedConf[key]['sc']['ReferenceVoltage']['all']['Calib'] = my_calib_preamp
+                nestedConf[key]['sc']['ReferenceVoltage']['all']['Calib_2V5'] = my_calib_conv
+                
+                nestedConf[key]['sc']['ReferenceVoltage']['all']['choice_cinj'] = choice_cinj   # "1": inject to preamp input, "0": inject to conveyor input
+                nestedConf[key]['sc']['ReferenceVoltage']['all']['cmd_120p'] = cmd_120p
                 nestedConf[key]['sc']['ch']['all']['trim_inv'] = trim_val
                 if gain==2:
                     for inj_chs in injectedChannels:
-                       [nestedConf[key]['sc']['ch'][inj_chs].update({'LowRange':0}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
-                       [nestedConf[key]['sc']['ch'][inj_chs].update({'HighRange':0}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
+                       [nestedConf[key]['sc']['ch'][inj_chs].update({'LowRange':L_g2}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
+                       [nestedConf[key]['sc']['ch'][inj_chs].update({'HighRange':H_g2}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
                 elif gain==1:
                     for inj_chs in injectedChannels:
                        print("Marke 3")
-                       [nestedConf[key]['sc']['ch'][inj_chs].update({'LowRange':0}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
-                       [nestedConf[key]['sc']['ch'][inj_chs].update({'HighRange':0}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
+                       [nestedConf[key]['sc']['ch'][inj_chs].update({'LowRange':L_g1}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
+                       [nestedConf[key]['sc']['ch'][inj_chs].update({'HighRange':H_g1}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
                    
                 elif gain==0:
                     for inj_chs in injectedChannels:
-                       [nestedConf[key]['sc']['ch'][inj_chs].update({'LowRange':0}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
-                       [nestedConf[key]['sc']['ch'][inj_chs].update({'HighRange':0}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
+                       [nestedConf[key]['sc']['ch'][inj_chs].update({'LowRange':L_g0}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
+                       [nestedConf[key]['sc']['ch'][inj_chs].update({'HighRange':H_g0}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
                    
                 else:
                     pass
