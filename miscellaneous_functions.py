@@ -43,10 +43,10 @@ def options_run():
     parser.add_option("--pullerPort", action="store", dest="pullerPort",default='6001', help="port of the client PC (loccalhost for the moment) waiting for daq config and commands (configure/start/stop)")
     
     parser.add_option("-I", "--initialize",default=False, action="store_true", dest="initialize", help="set to re-initialize the ROCs and daq-server instead of only configuring")
-
-    (options, args) = parser.parse_args()
-    print(options)
-    return options
+        
+    print(parser)
+    print(type(parser))
+    return parser
     
 def options_analyze():#No data taking
     from optparse import OptionParser
