@@ -40,7 +40,7 @@ def scan(i2csocket, daqsocket, calibreq, startBX, stopBX, stepBX, startPhase, st
             index=index+1
     return
 
-def PreampSampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, injectionConfig,suffix=""):
+def PreampSampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, device_type, injectionConfig,suffix=""):
     testName='PreampSampling_scan'
     odir = misc_func.mkdir(basedir,device_name,device_type,testName,suffix)
             
@@ -97,12 +97,18 @@ def PreampSampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, inj
 
 
 if __name__ == "__main__":
-    options = misc_func.options_run()#This will be constant for every test irrespective of the type of test
+    parser = misc_func.options_run()#This will be constant for every test irrespective of the type of test
+    
+    #One extra option custommade just for this script - internal pulse height (calib)
+    parser.add_option("-c","--calib", action="store", dest="calib",default='0', help="pulse height for internal injection")
+ 
+    (options, args) = parser.parse_args()
+    print(options)
     (daqsocket,clisocket,i2csocket) = zmqctrl.pre_init(options)
 
     injectionConfig = {
         'gain' : 1,   # gain=0: LowRange, gain=1: HighRange
-        'calib' : 200,
+        'calib' : int(options.calib),
         'injectedChannels' : [0, 2, 4, 6, 8, 10, 12, 14, 16]  # scan 5
     }
     PreampSampling_scan(i2csocket,daqsocket,clisocket,options.odir,options.dut,options.device_type,injectionConfig,suffix="")
