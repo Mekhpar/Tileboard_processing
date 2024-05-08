@@ -246,6 +246,20 @@ class i2cController(zmqController):
         print("Configure and tdc reset")
         
 
+    def lg_hg_deactivate(self,process = 'int', subprocess = 'conv', injectedChannel = 0, lg=0, hg=0):
+        nestedConf = nested_dict()
+        if process == 'int':
+            if subprocess == 'conv': #I.e. this step should only be performed for internal conveyor injection (still do not know why?)    
+                print("Ruecksetzen High- LowRange Kanal: ", injectedChannel)
+                [nestedConf[key]['sc']['ch'][injectedChannel].update({'LowRange':lg}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ] 
+                [nestedConf[key]['sc']['ch'][injectedChannel].update({'HighRange':hg}) for key in self.yamlConfig.keys() if key.find('roc_s')==0 ]
+            elif subprocess == 'preamp':
+                pass #Do nothing
+                print ("Low range and high range NOT reset")        
+        elif process == 'ext':
+            pass #Do nothing
+            print ("Low range and high range NOT reset")        
+
 class daqController(zmqController):
     def start(self):
         status="none"
