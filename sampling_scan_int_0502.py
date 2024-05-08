@@ -35,6 +35,8 @@ def scan(i2csocket, daqsocket, gain, calib, calibreq, startBX, stopBX, stepBX, s
                               runid=index,testName=testName,keepRawData=1,
                               chip_params=chip_params)
             index=index+1
+        for inj_chs in injectedChannels: #This particular setting seems to have been done only for this script (conveyor injection) - why do we want to have both ranges to be 0 at each BX except the first?
+            i2csocket.lg_hg_deactivate(process = 'int', subprocess = 'preamp', injectedChannel = inj_chs, lg=0, hg=0)
     return
 
 def PreampSampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, device_type, injectionConfig,suffix=""):
@@ -108,6 +110,8 @@ if __name__ == "__main__":
     injectionConfig = {
         'gain' : 1,   # gain=0: LowRange, gain=1: HighRange
         'calib' : int(options.calib),
-        'injectedChannels' : [0, 2, 4, 6, 8, 10, 12, 14, 16]  # scan 5
+        #'injectedChannels' : [0, 2, 4, 6, 8, 10, 12, 14, 16]  # scan 5
+        'injectedChannels' : [6, 10, 45, 52]  # scan 8
+
     }
     PreampSampling_scan(i2csocket,daqsocket,clisocket,options.odir,options.dut,options.device_type,injectionConfig,suffix="")
