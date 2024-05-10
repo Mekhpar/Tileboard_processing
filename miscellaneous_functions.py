@@ -20,6 +20,28 @@ def mkdir(basedir,device_name,device_type,testName,suffix):
 
     return odir
 
+def injection_config_assign(injectionConfig):
+    gain = injectionConfig['gain'] # 0 for low range ; 1 for high range
+    calib = injectionConfig['calib'] # 
+    injectedChannels=injectionConfig['injectedChannels']
+    return gain, calib, injectedChannels
+
+def configure_injection_assign(injection_data): #This formulation will be similar to injection config
+  calib_preamp = injection_data['calib_preamp']
+  calib_conv = injection_data['calib_conv']
+  IntCtest = injection_data['IntCtest']
+  choice_cinj = injection_data['choice_cinj']
+  cmd_120p = injection_data['cmd_120p']
+  L_g2 = injection_data['L_g2']
+  L_g1 = injection_data['L_g1']
+  L_g0 = injection_data['L_g0']
+  
+  H_g2 = injection_data['H_g2']
+  H_g1 = injection_data['H_g1']
+  H_g0 = injection_data['H_g0']  
+  print("Injection options", "calib_preamp: ", calib_preamp, "calib_conv:",calib_conv, "IntCtest:", IntCtest, "choice_cinj:", choice_cinj, "cmd_120p:", cmd_120p, "L_g2:", L_g2, "L_g1:", L_g1, "L_g0:", L_g0, "H_g2:", H_g2, "H_g1:", H_g1, "H_g0:", H_g0)
+  return calib_preamp, calib_conv, IntCtest, choice_cinj, cmd_120p, L_g2, L_g1, L_g0, H_g2, H_g1, H_g0
+
 def options_run():
     from optparse import OptionParser
     parser = OptionParser()
