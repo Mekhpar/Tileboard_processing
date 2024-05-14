@@ -126,7 +126,9 @@ def Sampling_scan(i2csocket,daqsocket, clisocket, extra_text, basedir,device_nam
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     fout=open(odir+"TB2_info.txt", "x")
     fout.write("injectedChannels:" + '\n')
-    fout.write(str(inj_ch) for inj_ch in injectedChannels + " " for inj_ch in injectedChannels +"]")
+    for inj_ch in injectedChannels:
+        fout.write(str(inj_ch) + " ")
+    
     fout.write('\n')
     fout.write("####  Before data capture ####" + '\n')
     fout.write("#  Tileboard2 Slow Control Data" + '\n')
@@ -147,19 +149,7 @@ def Sampling_scan(i2csocket,daqsocket, clisocket, extra_text, basedir,device_nam
 
     clisocket.stop()
     mylittlenotifier.stop()
-    
-    '''
-    scan_analyzer = analyzer.sampling_scan_analyzer(odir=odir)
-    # files = glob.glob(odir+"/"+clisocket.yamlConfig['global']['run_type']+"*.root")
-    files = glob.glob(odir+"/"+clisocket.yamlConfig['client']['run_type']+"*.root")
-     
-    for f in files:
-	    scan_analyzer.add(f)
-    scan_analyzer.mergeData()
-    scan_analyzer.makePlots(injectedChannels)
-    scan_analyzer.determine_bestPhase(injectedChannels)
-    '''
-
+   
     # return to no injection setting
     #Lots of options here are equivalent to the default ones, might as well not write them down explicitly
     #post_injection
@@ -167,15 +157,10 @@ def Sampling_scan(i2csocket,daqsocket, clisocket, extra_text, basedir,device_nam
     i2csocket.configure_injection(trim_val = 0, process = process, calib_preamp = calib_preamp, calib_conv = calib_conv, gain = gain,injectedChannels = injectedChannels, IntCtest = IntCtest, choice_cinj = choice_cinj, cmd_120p = cmd_120p, L_g2 = L_g2, H_g2 = H_g2, L_g1 = L_g1, H_g1 = H_g1, L_g0 = L_g0, H_g0 = H_g0)    
 
     #i2csocket.configure_injection(trim_val = 0, process = process, calib_preamp = 0, calib_conv = 0, gain=0,injectedChannels=injectedChannels, IntCtest = 0, choice_cinj = 0, cmd_120p = 0, L_g2 = 0, H_g2 = 0, L_g1 = 0, H_g1 = 0, L_g0 = 0, H_g0 = 0)
-    '''
-    with open(odir+'/best_phase.yaml') as fin:
-        cfg = yaml.safe_load(fin)
-        i2csocket.configure(yamlNode=cfg)
-        i2csocket.update_yamlConfig(yamlNode=cfg)
-    '''    
     return odir
         
-def Sampling_scan_analysis(i2csocket,process,subprocess,injectedChannels,basedir,device_name,device_type,directory_index, calib, LEDvolt, OV, suffix=""): #This is already agnostic of the process, even the analysis file used is the same
+#Remove injectedChannels as an external argument because they will be read from the TB_info.txt file        
+def Sampling_scan_analysis(i2csocket,process,subprocess,basedir,device_name,device_type,directory_index, calib, LEDvolt, OV, suffix=""): #This is already agnostic of the process, even the analysis file used is the same
 #calib, LEDvolt, OV are required to be entered by the user because they define the folder name
 #There is no need to give the full injectionConfig here, only the list of channels for plotting
     if process == 'ext':
@@ -186,10 +171,12 @@ def Sampling_scan_analysis(i2csocket,process,subprocess,injectedChannels,basedir
     testName = subprocess.capitalize() + 'Sampling_scan_' + extra_text
     odir = "%s/%s/%s/%s_%s_%s/"%( os.path.realpath(basedir), device_name,device_type,testName,device_type,directory_index)
     print("Directory to be analyzed", odir)
+    
     scan_analyzer = analyzer.sampling_scan_analyzer(odir=odir)
 
     files = glob.glob(odir+"/"+"sampling_scan"+"*.root")
-     
+    
+    injectedChannels = scan_analyzer.get_injectedChannels(odir)
     for f in files:
 	    scan_analyzer.add(f)
     scan_analyzer.mergeData()
