@@ -25,23 +25,31 @@ class pedestal_run_analyzer(analyzer):
             calib = data[ data['channeltype']==1 ].copy()
             cm = data[ data['channeltype']==100 ].copy()
             #print(ch['adc_median'])
-            ch_median = pd.DataFrame([ch['adc_median']])
-            ch_stddev = pd.DataFrame([ch['adc_stdd']])
-            print(ch_median)
-            print("Pedestal upper limit", ch_median.iloc[0,0] + 2*ch_stddev.iloc[0,0])
-            print(type(ch_median.iloc[0,0] + 2*ch_stddev.iloc[0,0]))
-            
-            #for ch in range(len(ch['channel'])):
-            for ch in range(0,3):
-                nestedConf['ch'][ch]['pedestal_upper'] = ch_median.iloc[0,ch] + 2*ch_stddev.iloc[0,ch]
-                nestedConf['ch'][ch]['pedestal_lower'] = ch_median.iloc[0,ch] - 2*ch_stddev.iloc[0,ch]
+            ch_array=[ch,calib,cm]#This seems like it is the whole series/dataframe
+            ch_key_array = ['ch','calib','cm']
+            for i in range(len(ch_array)):
+                ch_median = pd.DataFrame([ch_array[i]['adc_median']])
+                ch_stddev = pd.DataFrame([ch_array[i]['adc_stdd']])
+                print(ch_median)
+                print("Pedestal upper limit", ch_median.iloc[0,0] + 2*ch_stddev.iloc[0,0])
+                print(type(ch_median.iloc[0,0] + 2*ch_stddev.iloc[0,0]))
                 
-            print(nestedConf.to_dict())
-            print(type(nestedConf.to_dict()))
-        with open(directory,'w') as file:
-            print(yaml.dump(nestedConf.to_dict(),file))
-            yaml.dump(1,file)
-            print("Written to yaml file")
+                for ch in range(len(ch_array[i]['channel'])):
+                    
+                    #nestedConf['ch_array[i]'][ch]['pedestal_lower'] = ch_median.iloc[0,ch] - 2*ch_stddev.iloc[0,ch] #Do not use this!!
+                    nestedConf[ch_key_array[i]][ch]['pedestal_lower'] = int(ch_median.iloc[0,ch] - 2*ch_stddev.iloc[0,ch])
+                    nestedConf[ch_key_array[i]][ch]['pedestal_upper'] = int(ch_median.iloc[0,ch] + 2*ch_stddev.iloc[0,ch])+1
+                    nestedConf[ch_key_array[i]][ch]['noise_lower'] = 0.2 #Should not be exactly 0 since that indicates a problem too
+                    nestedConf[ch_key_array[i]][ch]['noise_upper'] = round(float(ch_stddev.iloc[0,ch]*1.5),2)
+            
+                with open(directory,'w') as file:
+                    print(yaml.dump(nestedConf.to_dict(),file,sort_keys=False))
+                    print("Written to yaml file")
+                
+            #print(nestedConf.to_dict())
+            #print(type(nestedConf.to_dict()))
+
+
 
     def makePlots(self):
 
