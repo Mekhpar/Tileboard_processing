@@ -4,8 +4,44 @@ import glob
 import seaborn as sns
 sns.set_style("ticks")
 from matplotlib.ticker import MultipleLocator
+import yaml, os
+from nested_dict import nested_dict
+import pandas as pd
 
 class pedestal_run_analyzer(analyzer):
+    #This is only a one time thing for a particular size of board
+    def pass_criteria_pedestal(self,device_type): #Here device_type is only size and not index (for eg TB3_D8 and not TB3_D8_11)
+        directory = "/home/reinecke/TBtesterv2_ROCv3_menu_Jia-Hao_copy/hexactrl-sw/hexactrl-script_Mar23TB/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
+        nestedConf = nested_dict()
+        #Next part copied from the functions below, probably looping over in case of 2 or more ROCs
+        nchip = len( self.data.groupby('chip').nunique() )
+        for chip in range(nchip):
+            data = self.data[ self.data['chip']==chip ].copy() #[ self.data['channeltype']==0 ]
+            print("Number of channels",len(data['channel']))
+            ch_yaml = ''
+            
+            
+            ch = data[ data['channeltype']==0 ].copy()
+            calib = data[ data['channeltype']==1 ].copy()
+            cm = data[ data['channeltype']==100 ].copy()
+            #print(ch['adc_median'])
+            ch_median = pd.DataFrame([ch['adc_median']])
+            ch_stddev = pd.DataFrame([ch['adc_stdd']])
+            print(ch_median)
+            print("Pedestal upper limit", ch_median.iloc[0,0] + 2*ch_stddev.iloc[0,0])
+            print(type(ch_median.iloc[0,0] + 2*ch_stddev.iloc[0,0]))
+            
+            #for ch in range(len(ch['channel'])):
+            for ch in range(0,3):
+                nestedConf['ch'][ch]['pedestal_upper'] = ch_median.iloc[0,ch] + 2*ch_stddev.iloc[0,ch]
+                nestedConf['ch'][ch]['pedestal_lower'] = ch_median.iloc[0,ch] - 2*ch_stddev.iloc[0,ch]
+                
+            print(nestedConf.to_dict())
+            print(type(nestedConf.to_dict()))
+        with open(directory,'w') as file:
+            print(yaml.dump(nestedConf.to_dict(),file))
+            yaml.dump(1,file)
+            print("Written to yaml file")
 
     def makePlots(self):
 
@@ -183,13 +219,22 @@ class pedestal_run_raw_analyzer(analyzer):
             # plt.savefig("%s/pedestal_and_noise_vs_channel_chip%d.pdf"%(self.odir,chip),format='pdf',bbox_inches='tight') 
 
 if __name__ == "__main__":
-
+    
     if len(sys.argv) == 3:
         indir = sys.argv[1]
         odir = sys.argv[2]
 
         ped_analyzer = pedestal_run_analyzer(odir=odir)
+        files = glob.glob(indir+"/pedestal_run*.root")
+        print(files)
+        for f in files:
+            ped_analyzer.add(f)
+
+        ped_analyzer.mergeData()        
+        ped_analyzer.pass_criteria_pedestal(device_type = "TB3_D8")    
         #ped_analyzer = pedestal_run_raw_analyzer(odir=odir, treename = 'unpacker_data/hgcroc')
+        #why is this even needed here anyway?
+        '''
         files = glob.glob(indir+"/pedestal_run*.root")
         print(files)
         for f in files:
@@ -199,6 +244,9 @@ if __name__ == "__main__":
         ped_analyzer.makePlots()
         ped_analyzer.addSummary()
         ped_analyzer.writeSummary()
+        '''
 
     else:
         print("No argument given")
+           
+   
