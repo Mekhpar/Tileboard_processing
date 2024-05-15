@@ -16,9 +16,8 @@ class pedestal_run_analyzer(analyzer):
         #Next part copied from the functions below, probably looping over in case of 2 or more ROCs
         nchip = len( self.data.groupby('chip').nunique() )
         for chip in range(nchip):
-            data = self.data[ self.data['chip']==chip ].copy() #[ self.data['channeltype']==0 ]
+            data = self.data[ self.data['chip']==chip ].copy()
             print("Number of channels",len(data['channel']))
-            ch_yaml = ''
             
             
             ch = data[ data['channeltype']==0 ].copy()
@@ -46,10 +45,12 @@ class pedestal_run_analyzer(analyzer):
                     print(yaml.dump(nestedConf.to_dict(),file,sort_keys=False))
                     print("Written to yaml file")
                 
-            #print(nestedConf.to_dict())
-            #print(type(nestedConf.to_dict()))
-
-
+    def check_corruption(self):
+        nchip = len( self.data.groupby('chip').nunique() )
+        for chip in range(nchip):
+            data = self.data[ self.data['chip']==chip ].copy()
+            #probably no cuts or separation of channels here, cannot use the summary ttree most likely (there seems to be no event branch in there)
+            #data[ data['corruption']!=0 ].copy() #Something like this, but with number of events for each channel
 
     def makePlots(self):
 
