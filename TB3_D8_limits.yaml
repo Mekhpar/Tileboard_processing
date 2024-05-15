@@ -1,0 +1,393 @@
+ch:
+  0:
+    pedestal_lower: 314
+    pedestal_upper: 320
+    noise_lower: 0.2
+    noise_upper: 1.66
+  1:
+    pedestal_lower: 337
+    pedestal_upper: 345
+    noise_lower: 0.2
+    noise_upper: 2.7
+  2:
+    pedestal_lower: 328
+    pedestal_upper: 334
+    noise_lower: 0.2
+    noise_upper: 1.87
+  3:
+    pedestal_lower: 343
+    pedestal_upper: 351
+    noise_lower: 0.2
+    noise_upper: 2.76
+  4:
+    pedestal_lower: 399
+    pedestal_upper: 405
+    noise_lower: 0.2
+    noise_upper: 1.8
+  5:
+    pedestal_lower: 360
+    pedestal_upper: 366
+    noise_lower: 0.2
+    noise_upper: 1.86
+  6:
+    pedestal_lower: 347
+    pedestal_upper: 353
+    noise_lower: 0.2
+    noise_upper: 1.62
+  7:
+    pedestal_lower: 374
+    pedestal_upper: 380
+    noise_lower: 0.2
+    noise_upper: 1.91
+  8:
+    pedestal_lower: 369
+    pedestal_upper: 375
+    noise_lower: 0.2
+    noise_upper: 1.82
+  9:
+    pedestal_lower: 340
+    pedestal_upper: 346
+    noise_lower: 0.2
+    noise_upper: 1.78
+  10:
+    pedestal_lower: 321
+    pedestal_upper: 329
+    noise_lower: 0.2
+    noise_upper: 2.59
+  11:
+    pedestal_lower: 367
+    pedestal_upper: 373
+    noise_lower: 0.2
+    noise_upper: 1.78
+  12:
+    pedestal_lower: 351
+    pedestal_upper: 359
+    noise_lower: 0.2
+    noise_upper: 2.95
+  13:
+    pedestal_lower: 386
+    pedestal_upper: 392
+    noise_lower: 0.2
+    noise_upper: 1.86
+  14:
+    pedestal_lower: 381
+    pedestal_upper: 385
+    noise_lower: 0.2
+    noise_upper: 1.42
+  15:
+    pedestal_lower: 363
+    pedestal_upper: 369
+    noise_lower: 0.2
+    noise_upper: 1.66
+  16:
+    pedestal_lower: 370
+    pedestal_upper: 376
+    noise_lower: 0.2
+    noise_upper: 1.76
+  17:
+    pedestal_lower: 354
+    pedestal_upper: 360
+    noise_lower: 0.2
+    noise_upper: 1.74
+  18:
+    pedestal_lower: 366
+    pedestal_upper: 372
+    noise_lower: 0.2
+    noise_upper: 1.8
+  19:
+    pedestal_lower: 340
+    pedestal_upper: 346
+    noise_lower: 0.2
+    noise_upper: 1.7
+  20:
+    pedestal_lower: 335
+    pedestal_upper: 341
+    noise_lower: 0.2
+    noise_upper: 1.71
+  21:
+    pedestal_lower: 365
+    pedestal_upper: 373
+    noise_lower: 0.2
+    noise_upper: 2.76
+  22:
+    pedestal_lower: 346
+    pedestal_upper: 356
+    noise_lower: 0.2
+    noise_upper: 3.33
+  23:
+    pedestal_lower: 357
+    pedestal_upper: 365
+    noise_lower: 0.2
+    noise_upper: 2.89
+  24:
+    pedestal_lower: 356
+    pedestal_upper: 366
+    noise_lower: 0.2
+    noise_upper: 3.0
+  25:
+    pedestal_lower: 331
+    pedestal_upper: 337
+    noise_lower: 0.2
+    noise_upper: 1.83
+  26:
+    pedestal_lower: 356
+    pedestal_upper: 362
+    noise_lower: 0.2
+    noise_upper: 1.9
+  27:
+    pedestal_lower: 354
+    pedestal_upper: 360
+    noise_lower: 0.2
+    noise_upper: 1.8
+  28:
+    pedestal_lower: 351
+    pedestal_upper: 359
+    noise_lower: 0.2
+    noise_upper: 2.94
+  29:
+    pedestal_lower: 334
+    pedestal_upper: 342
+    noise_lower: 0.2
+    noise_upper: 2.9
+  30:
+    pedestal_lower: 330
+    pedestal_upper: 338
+    noise_lower: 0.2
+    noise_upper: 2.68
+  31:
+    pedestal_lower: 367
+    pedestal_upper: 377
+    noise_lower: 0.2
+    noise_upper: 3.03
+  32:
+    pedestal_lower: 370
+    pedestal_upper: 378
+    noise_lower: 0.2
+    noise_upper: 2.85
+  33:
+    pedestal_lower: 355
+    pedestal_upper: 363
+    noise_lower: 0.2
+    noise_upper: 2.8
+  34:
+    pedestal_lower: 371
+    pedestal_upper: 379
+    noise_lower: 0.2
+    noise_upper: 2.74
+  35:
+    pedestal_lower: 390
+    pedestal_upper: 400
+    noise_lower: 0.2
+    noise_upper: 3.01
+  36:
+    pedestal_lower: 383
+    pedestal_upper: 393
+    noise_lower: 0.2
+    noise_upper: 3.06
+  37:
+    pedestal_lower: 377
+    pedestal_upper: 385
+    noise_lower: 0.2
+    noise_upper: 2.75
+  38:
+    pedestal_lower: 406
+    pedestal_upper: 416
+    noise_lower: 0.2
+    noise_upper: 3.04
+  39:
+    pedestal_lower: 343
+    pedestal_upper: 351
+    noise_lower: 0.2
+    noise_upper: 2.92
+  40:
+    pedestal_lower: 394
+    pedestal_upper: 400
+    noise_lower: 0.2
+    noise_upper: 2.2
+  41:
+    pedestal_lower: 366
+    pedestal_upper: 372
+    noise_lower: 0.2
+    noise_upper: 2.12
+  42:
+    pedestal_lower: 346
+    pedestal_upper: 356
+    noise_lower: 0.2
+    noise_upper: 3.65
+  43:
+    pedestal_lower: 387
+    pedestal_upper: 397
+    noise_lower: 0.2
+    noise_upper: 3.0
+  44:
+    pedestal_lower: 366
+    pedestal_upper: 372
+    noise_lower: 0.2
+    noise_upper: 1.84
+  45:
+    pedestal_lower: 349
+    pedestal_upper: 357
+    noise_lower: 0.2
+    noise_upper: 2.88
+  46:
+    pedestal_lower: 584
+    pedestal_upper: 585
+    noise_lower: 0.2
+    noise_upper: 0.0
+  47:
+    pedestal_lower: 398
+    pedestal_upper: 404
+    noise_lower: 0.2
+    noise_upper: 1.88
+  48:
+    pedestal_lower: 364
+    pedestal_upper: 370
+    noise_lower: 0.2
+    noise_upper: 1.7
+  49:
+    pedestal_lower: 366
+    pedestal_upper: 374
+    noise_lower: 0.2
+    noise_upper: 2.91
+  50:
+    pedestal_lower: 353
+    pedestal_upper: 361
+    noise_lower: 0.2
+    noise_upper: 2.89
+  51:
+    pedestal_lower: 355
+    pedestal_upper: 363
+    noise_lower: 0.2
+    noise_upper: 2.77
+  52:
+    pedestal_lower: 355
+    pedestal_upper: 363
+    noise_lower: 0.2
+    noise_upper: 2.88
+  53:
+    pedestal_lower: 400
+    pedestal_upper: 406
+    noise_lower: 0.2
+    noise_upper: 1.89
+  54:
+    pedestal_lower: 350
+    pedestal_upper: 356
+    noise_lower: 0.2
+    noise_upper: 1.96
+  55:
+    pedestal_lower: 380
+    pedestal_upper: 386
+    noise_lower: 0.2
+    noise_upper: 1.5
+  56:
+    pedestal_lower: 334
+    pedestal_upper: 340
+    noise_lower: 0.2
+    noise_upper: 1.94
+  57:
+    pedestal_lower: 370
+    pedestal_upper: 376
+    noise_lower: 0.2
+    noise_upper: 1.89
+  58:
+    pedestal_lower: 392
+    pedestal_upper: 398
+    noise_lower: 0.2
+    noise_upper: 2.03
+  59:
+    pedestal_lower: 326
+    pedestal_upper: 334
+    noise_lower: 0.2
+    noise_upper: 2.9
+  60:
+    pedestal_lower: 416
+    pedestal_upper: 422
+    noise_lower: 0.2
+    noise_upper: 2.0
+  61:
+    pedestal_lower: 345
+    pedestal_upper: 353
+    noise_lower: 0.2
+    noise_upper: 2.69
+  62:
+    pedestal_lower: 362
+    pedestal_upper: 368
+    noise_lower: 0.2
+    noise_upper: 1.87
+  63:
+    pedestal_lower: 359
+    pedestal_upper: 365
+    noise_lower: 0.2
+    noise_upper: 1.71
+  64:
+    pedestal_lower: 371
+    pedestal_upper: 379
+    noise_lower: 0.2
+    noise_upper: 2.85
+  65:
+    pedestal_lower: 380
+    pedestal_upper: 386
+    noise_lower: 0.2
+    noise_upper: 2.04
+  66:
+    pedestal_lower: 361
+    pedestal_upper: 369
+    noise_lower: 0.2
+    noise_upper: 2.68
+  67:
+    pedestal_lower: 343
+    pedestal_upper: 349
+    noise_lower: 0.2
+    noise_upper: 1.88
+  68:
+    pedestal_lower: 330
+    pedestal_upper: 336
+    noise_lower: 0.2
+    noise_upper: 1.93
+  69:
+    pedestal_lower: 356
+    pedestal_upper: 362
+    noise_lower: 0.2
+    noise_upper: 1.87
+  70:
+    pedestal_lower: 325
+    pedestal_upper: 331
+    noise_lower: 0.2
+    noise_upper: 1.94
+  71:
+    pedestal_lower: 346
+    pedestal_upper: 352
+    noise_lower: 0.2
+    noise_upper: 1.58
+calib:
+  0:
+    pedestal_lower: 315
+    pedestal_upper: 321
+    noise_lower: 0.2
+    noise_upper: 1.53
+  1:
+    pedestal_lower: 334
+    pedestal_upper: 340
+    noise_lower: 0.2
+    noise_upper: 1.83
+cm:
+  0:
+    pedestal_lower: 58
+    pedestal_upper: 64
+    noise_lower: 0.2
+    noise_upper: 1.81
+  1:
+    pedestal_lower: 58
+    pedestal_upper: 64
+    noise_lower: 0.2
+    noise_upper: 1.79
+  2:
+    pedestal_lower: 53
+    pedestal_upper: 57
+    noise_lower: 0.2
+    noise_upper: 1.46
+  3:
+    pedestal_lower: 80
+    pedestal_upper: 86
+    noise_lower: 0.2
+    noise_upper: 1.66
