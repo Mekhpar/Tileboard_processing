@@ -7,7 +7,72 @@ from matplotlib.ticker import MultipleLocator
 import yaml, os
 from nested_dict import nested_dict
 import pandas as pd
+import numpy as np
 
+class ped_event_analyzer(rawroot_reader):
+    #It is probably sufficient to check by half wise instead of channel wise
+    def check_corruption(self):
+        #print(self.df) #This looks like the data below (what we want with 10000 events for each channel)
+        #data = self.df
+
+        nchip = len( self.df.groupby('chip').nunique() )
+        chip_goodness = []
+        for chip in range(nchip):
+
+            data = self.df[ self.df['chip']==chip ].copy()
+            nhalves = len( data.groupby('half').nunique() )
+            corrpt = pd.DataFrame(columns = ['half','corrpt_percent'],index=range(nhalves))
+            chip_check_flag = 0
+            for half in range(nhalves):
+                data_half = data[ data['half']==half].copy()
+                print("Half",half)
+                corrupted_events = len(data_half[ data_half['corruption']!=0])
+                total_events = len(data_half)
+                print("Corrupted events and total number of events", corrupted_events,total_events)
+                #corrpt.append((corrupted_events/total_events)*100.)
+                corrupt_percentage = (corrupted_events/total_events)*100.
+                
+                corrpt.loc[half].half = half
+                corrpt.loc[half].corrpt_percent = corrupt_percentage
+                
+            print(corrpt)
+            pass_limit = 0.1
+            fail_limit = 0.2
+            #fail_limit = 100
+            
+            #Checking length of arrays after applying non corrupted/ corrupted cuts
+            fail_half = corrpt[corrpt['corrpt_percent']>fail_limit].copy()
+            pass_half = corrpt[corrpt['corrpt_percent']<=pass_limit].copy()
+            grey_half = corrpt[corrpt['corrpt_percent']>pass_limit].copy()
+            grey_half = grey_half[corrpt['corrpt_percent']<=fail_limit].copy()
+
+            if len(fail_half) >=1:
+                print("Chip failed to give good data")
+                
+            elif len(grey_half) >=1:
+                print("Chip may or may not be great")
+            
+            elif len(pass_half) == nhalves:
+                print("Chip is good")
+                            
+        #return chip_goodness
+            
+        '''
+        nchannels = len( data.groupby('channel').nunique() )
+        print("Half the Number of channels", nchannels)
+        for channel_half in range(nchannels):
+            data_channel = data[ data['channel']==channel_half].copy()
+            #print("Channel number", channel_half)
+            #print(data_channel)
+            nhalves = len( data_channel.groupby('half').nunique() )
+            for half in range(nhalves):
+                data_channel_half = data_channel[ data_channel['half']==half].copy()
+                print("Channel and half number", channel_half,half)
+                #print(data_channel_half) #This is the set of events for each channel (separated)
+                corrupted_events = len(data_channel_half[ data_channel_half['corruption']!=0])
+                total_events = len(data_channel_half)
+                print("Corrupted events and total number of events", corrupted_events,total_events)
+        '''
 class pedestal_run_analyzer(analyzer):
     #This is only a one time thing for a particular size of board
     def pass_criteria_pedestal(self,device_type): #Here device_type is only size and not index (for eg TB3_D8 and not TB3_D8_11)
@@ -23,11 +88,12 @@ class pedestal_run_analyzer(analyzer):
             ch = data[ data['channeltype']==0 ].copy()
             calib = data[ data['channeltype']==1 ].copy()
             cm = data[ data['channeltype']==100 ].copy()
-            #print(ch['adc_median'])
             ch_array=[ch,calib,cm]#This seems like it is the whole series/dataframe
             ch_key_array = ['ch','calib','cm']
             for i in range(len(ch_array)):
-                ch_median = pd.DataFrame([ch_array[i]['adc_median']])
+                #ch_median = pd.DataFrame([ch_array[i]['adc_median']])
+                
+                ch_median = pd.DataFrame([ch_array[i]['adc_mean']])
                 ch_stddev = pd.DataFrame([ch_array[i]['adc_stdd']])
                 print(ch_median)
                 print("Pedestal upper limit", ch_median.iloc[0,0] + 2*ch_stddev.iloc[0,0])
@@ -45,12 +111,6 @@ class pedestal_run_analyzer(analyzer):
                     print(yaml.dump(nestedConf.to_dict(),file,sort_keys=False))
                     print("Written to yaml file")
                 
-    def check_corruption(self):
-        nchip = len( self.data.groupby('chip').nunique() )
-        for chip in range(nchip):
-            data = self.data[ self.data['chip']==chip ].copy()
-            #probably no cuts or separation of channels here, cannot use the summary ttree most likely (there seems to be no event branch in there)
-            #data[ data['corruption']!=0 ].copy() #Something like this, but with number of events for each channel
 
     def makePlots(self):
 
@@ -241,6 +301,9 @@ if __name__ == "__main__":
 
         ped_analyzer.mergeData()        
         ped_analyzer.pass_criteria_pedestal(device_type = "TB3_D8")    
+        ped_analyzer.addSummary()
+        ped_analyzer.writeSummary()
+        
         #ped_analyzer = pedestal_run_raw_analyzer(odir=odir, treename = 'unpacker_data/hgcroc')
         #why is this even needed here anyway?
         '''
