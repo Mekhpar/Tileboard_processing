@@ -11,14 +11,16 @@ import numpy as np
 
 class ped_event_analyzer(rawroot_reader):
     #It is probably sufficient to check by half wise instead of channel wise
-    def check_corruption(self):
+    #3 flags for each chip (some boards have 2 ROCs) - 0 for fail, 1 for grey area and 2 for pass
+    
+    def check_corruption(self,pass_limit,fail_limit, fout = ''):
         #print(self.df) #This looks like the data below (what we want with 10000 events for each channel)
         #data = self.df
-
+        nestedConf = nested_dict()
         nchip = len( self.df.groupby('chip').nunique() )
         chip_goodness = []
         for chip in range(nchip):
-
+            nestedConf['corruption']['bad_half']['chip'+str(chip)]['half'] = []
             data = self.df[ self.df['chip']==chip ].copy()
             nhalves = len( data.groupby('half').nunique() )
             corrpt = pd.DataFrame(columns = ['half','corrpt_percent'],index=range(nhalves))
@@ -29,50 +31,40 @@ class ped_event_analyzer(rawroot_reader):
                 corrupted_events = len(data_half[ data_half['corruption']!=0])
                 total_events = len(data_half)
                 print("Corrupted events and total number of events", corrupted_events,total_events)
-                #corrpt.append((corrupted_events/total_events)*100.)
                 corrupt_percentage = (corrupted_events/total_events)*100.
                 
                 corrpt.loc[half].half = half
                 corrpt.loc[half].corrpt_percent = corrupt_percentage
                 
             print(corrpt)
-            pass_limit = 0.1
-            fail_limit = 0.2
-            #fail_limit = 100
             
             #Checking length of arrays after applying non corrupted/ corrupted cuts
             fail_half = corrpt[corrpt['corrpt_percent']>fail_limit].copy()
             pass_half = corrpt[corrpt['corrpt_percent']<=pass_limit].copy()
+            
             grey_half = corrpt[corrpt['corrpt_percent']>pass_limit].copy()
-            grey_half = grey_half[corrpt['corrpt_percent']<=fail_limit].copy()
+            grey_half = grey_half[grey_half['corrpt_percent']<=fail_limit].copy()
 
             if len(fail_half) >=1:
                 print("Chip failed to give good data")
+                chip_goodness.append(0)
+                for i in range(len(fail_half)):
+                    nestedConf['corruption']['bad_half']['chip'+str(chip)]['half'] = int(fail_half['half'])
                 
             elif len(grey_half) >=1:
                 print("Chip may or may not be great")
+                chip_goodness.append(1)
             
             elif len(pass_half) == nhalves:
                 print("Chip is good")
-                            
-        #return chip_goodness
-            
-        '''
-        nchannels = len( data.groupby('channel').nunique() )
-        print("Half the Number of channels", nchannels)
-        for channel_half in range(nchannels):
-            data_channel = data[ data['channel']==channel_half].copy()
-            #print("Channel number", channel_half)
-            #print(data_channel)
-            nhalves = len( data_channel.groupby('half').nunique() )
-            for half in range(nhalves):
-                data_channel_half = data_channel[ data_channel['half']==half].copy()
-                print("Channel and half number", channel_half,half)
-                #print(data_channel_half) #This is the set of events for each channel (separated)
-                corrupted_events = len(data_channel_half[ data_channel_half['corruption']!=0])
-                total_events = len(data_channel_half)
-                print("Corrupted events and total number of events", corrupted_events,total_events)
-        '''
+                chip_goodness.append(2)   
+
+            with open(fout,'w') as file:
+                print(yaml.dump(nestedConf.to_dict(),file,sort_keys=False))
+                print("Written to yaml file")                   
+                
+        return chip_goodness
+
 class pedestal_run_analyzer(analyzer):
     #This is only a one time thing for a particular size of board
     def pass_criteria_pedestal(self,device_type): #Here device_type is only size and not index (for eg TB3_D8 and not TB3_D8_11)
@@ -102,15 +94,68 @@ class pedestal_run_analyzer(analyzer):
                 for ch in range(len(ch_array[i]['channel'])):
                     
                     #nestedConf['ch_array[i]'][ch]['pedestal_lower'] = ch_median.iloc[0,ch] - 2*ch_stddev.iloc[0,ch] #Do not use this!!
-                    nestedConf[ch_key_array[i]][ch]['pedestal_lower'] = int(ch_median.iloc[0,ch] - 2*ch_stddev.iloc[0,ch])
-                    nestedConf[ch_key_array[i]][ch]['pedestal_upper'] = int(ch_median.iloc[0,ch] + 2*ch_stddev.iloc[0,ch])+1
-                    nestedConf[ch_key_array[i]][ch]['noise_lower'] = 0.2 #Should not be exactly 0 since that indicates a problem too
-                    nestedConf[ch_key_array[i]][ch]['noise_upper'] = round(float(ch_stddev.iloc[0,ch]*1.5),2)
-            
+                    '''
+                    nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['pedestal_lower'] = int(ch_median.iloc[0,ch] - 2*ch_stddev.iloc[0,ch])
+                    nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['pedestal_upper'] = int(ch_median.iloc[0,ch] + 2*ch_stddev.iloc[0,ch])+1
+                    nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['noise_lower'] = 0.2 #Should not be exactly 0 since that indicates a problem too
+                    nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['noise_upper'] = round(float(ch_stddev.iloc[0,ch]*1.5),2)
+                    '''
+                    
+                    #New limits since old ones produced very many false bad channels
+                    nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['pedestal_lower'] = int(ch_median.iloc[0,ch] - 10)
+                    nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['pedestal_upper'] = int(ch_median.iloc[0,ch] + 10)+1
+                    nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['noise_lower'] = 0.2 #Should not be exactly 0 since that indicates a problem too
+                    nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['noise_upper'] = max(3,round(float(ch_stddev.iloc[0,ch]*1.5),2))
+                    
+                    
                 with open(directory,'w') as file:
                     print(yaml.dump(nestedConf.to_dict(),file,sort_keys=False))
                     print("Written to yaml file")
+
+    def channel_ped_check(self,device_type):
+        directory = "/home/reinecke/TBtesterv2_ROCv3_menu_Jia-Hao_copy/hexactrl-sw/hexactrl-script_Mar23TB/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
+        nchip = len( self.data.groupby('chip').nunique() )
+        with open(directory,'r') as file:
+            ped_limits = yaml.safe_load(file)
+            print("Ped limits file contents")
+            #print(ped_limits)
                 
+            for key in ped_limits.keys():
+                print("Key name", key)
+                if key == 'pedestal_run': #Because there will be other tests as well
+                    for chip in range(nchip):
+                        #Seems a little redundant to copypaste this all over again from making the yaml file
+                        data = self.data[ self.data['chip']==chip ].copy()
+                        ch = data[ data['channeltype']==0 ].copy()
+                        calib = data[ data['channeltype']==1 ].copy()
+                        cm = data[ data['channeltype']==100 ].copy()
+                        ch_array=[ch,calib,cm]#This seems like it is the whole series/dataframe
+                        ch_key_array = ['ch','calib','cm']
+                        
+                        
+                        for key_roc in ped_limits[key].keys():
+                            if key_roc =='roc_s' + str(chip):
+                                for i in range(len(ch_array)):
+                                    ch_median = pd.DataFrame([ch_array[i]['adc_mean']])
+                                    ch_stddev = pd.DataFrame([ch_array[i]['adc_stdd']])                    
+                                    for ch in range(len(ch_array[i]['channel'])):
+                                        ped_low = ped_limits[key][key_roc][ch_key_array[i]][ch]['pedestal_lower']
+                                        ped_high = ped_limits[key][key_roc][ch_key_array[i]][ch]['pedestal_upper']
+                                        noise_low = ped_limits[key][key_roc][ch_key_array[i]][ch]['noise_lower']
+                                        noise_high = ped_limits[key][key_roc][ch_key_array[i]][ch]['noise_upper']
+                                        
+                                        #Actual comparison
+                                        if ch_stddev.iloc[0,ch] >= noise_low and ch_stddev.iloc[0,ch] <= noise_high:
+                                            if ch_median.iloc[0,ch] >= ped_low and ch_median.iloc[0,ch] <= ped_high:
+                                                pass
+                                            else:
+                                                print("Channel with bad pedestal value",ch_key_array[i],ch)
+                                                print("Actual mean pedestal value", ch_median.iloc[0,ch])
+                                                print("Pedestal limits for this channel", ped_low, ped_high)
+                                        else:
+                                            print("Channel with bad noise and/or pedestal value",ch_key_array[i],ch)                
+                                            print("Actual noise value", ch_stddev.iloc[0,ch])
+                                            print("Noise limits for this channel", noise_low, noise_high)
 
     def makePlots(self):
 
