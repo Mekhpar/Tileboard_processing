@@ -368,10 +368,6 @@ def pass_refined_criteria_pedestal(device_type): #Here device_type is only size 
     nestedConf = nested_dict() 
 
     df_net = {}
-    lower_quantile_0 = [0.00,0.00,0.00,0.00]
-    upper_quantile_0 = [1.00,1.00,1.00,1.00]
-    lower_quantile_1 = [0.00,0.03,0.00,0.00]
-    upper_quantile_1 = [1.00,0.90,1.00,1.00]
 
     for chip in range(nchip): #sort of assuming that the number of chips for all the runs are the same (which is reasonable because it is the same type of board)
         df_net[chip] = pd.DataFrame()
@@ -397,19 +393,21 @@ def pass_refined_criteria_pedestal(device_type): #Here device_type is only size 
         df_net[chip]['max_channel_ped'] = df_net[chip][['adc_median_0','adc_median_1','adc_median_2','adc_median_3']].max(axis=1)
         df_net[chip]['max_channel_noise'] = df_net[chip][['adc_stdd_0','adc_stdd_1','adc_stdd_2','adc_stdd_3']].max(axis=1)
         
-        dict_quantiles = {}
+        dict_spread = {}
         for run_id in range(len(run_ped_list)):
-            dict_quantiles['min_half_0_'+str(run_id).format(run_id)] = df_net_half_0['adc_median_'+str(run_id)].quantile(lower_quantile_0[run_id])
-            dict_quantiles['max_half_0_'+str(run_id).format(run_id)] = df_net_half_0['adc_median_'+str(run_id)].quantile(upper_quantile_0[run_id])
-            dict_quantiles['min_half_1_'+str(run_id).format(run_id)] = df_net_half_1['adc_median_'+str(run_id)].quantile(lower_quantile_1[run_id])
-            dict_quantiles['max_half_1_'+str(run_id).format(run_id)] = df_net_half_1['adc_median_'+str(run_id)].quantile(upper_quantile_1[run_id])
-        print(dict_quantiles)
+
+            dict_spread['min_half_0_'+str(run_id).format(run_id)] = df_net_half_0[df_net_half_0['adc_stdd_'+str(run_id)]>0]['adc_median_'+str(run_id)].min()
+            dict_spread['max_half_0_'+str(run_id).format(run_id)] = df_net_half_0[df_net_half_0['adc_stdd_'+str(run_id)]>0]['adc_median_'+str(run_id)].max()
+            dict_spread['min_half_1_'+str(run_id).format(run_id)] = df_net_half_1[df_net_half_1['adc_stdd_'+str(run_id)]>0]['adc_median_'+str(run_id)].min()
+            dict_spread['max_half_1_'+str(run_id).format(run_id)] = df_net_half_1[df_net_half_1['adc_stdd_'+str(run_id)]>0]['adc_median_'+str(run_id)].max()
+
+        print(dict_spread)
         print(df_net[chip])
 
-        min_half_0_net = min(dict_quantiles['min_half_0_0'],dict_quantiles['min_half_0_1'],dict_quantiles['min_half_0_2'],dict_quantiles['min_half_0_3'])
-        max_half_0_net = max(dict_quantiles['max_half_0_0'],dict_quantiles['max_half_0_1'],dict_quantiles['max_half_0_2'],dict_quantiles['max_half_0_3'])
-        min_half_1_net = min(dict_quantiles['min_half_1_0'],dict_quantiles['min_half_1_1'],dict_quantiles['min_half_1_2'],dict_quantiles['min_half_1_3'])
-        max_half_1_net = max(dict_quantiles['max_half_1_0'],dict_quantiles['max_half_1_1'],dict_quantiles['max_half_1_2'],dict_quantiles['max_half_1_3'])
+        min_half_0_net = min(dict_spread['min_half_0_0'],dict_spread['min_half_0_1'],dict_spread['min_half_0_2'],dict_spread['min_half_0_3'])
+        max_half_0_net = max(dict_spread['max_half_0_0'],dict_spread['max_half_0_1'],dict_spread['max_half_0_2'],dict_spread['max_half_0_3'])
+        min_half_1_net = min(dict_spread['min_half_1_0'],dict_spread['min_half_1_1'],dict_spread['min_half_1_2'],dict_spread['min_half_1_3'])
+        max_half_1_net = max(dict_spread['max_half_1_0'],dict_spread['max_half_1_1'],dict_spread['max_half_1_2'],dict_spread['max_half_1_3'])
 
         print(min_half_0_net,max_half_0_net,min_half_1_net,max_half_1_net)
         ch = pd.DataFrame()
