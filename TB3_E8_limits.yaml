@@ -1,0 +1,395 @@
+pedestal_run:
+  roc_s0:
+    ch:
+      0:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      1:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      2:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      3:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      4:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      5:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      6:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      7:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      8:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      9:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      10:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      11:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      12:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      13:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      14:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      15:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      16:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      17:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      18:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      19:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      20:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      21:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      22:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      23:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      24:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      25:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      26:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      27:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      28:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      29:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      30:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      31:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      32:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      33:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      34:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      35:
+        pedestal_lower: 173.0
+        pedestal_upper: 303.0
+        noise_lower: 0.2
+        noise_upper: 3
+      36:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      37:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      38:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      39:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      40:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      41:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      42:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      43:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      44:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      45:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      46:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      47:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      48:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      49:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      50:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      51:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      52:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      53:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      54:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      55:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      56:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      57:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      58:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      59:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      60:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      61:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      62:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      63:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      64:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      65:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      66:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      67:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      68:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      69:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      70:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+      71:
+        pedestal_lower: 133.3
+        pedestal_upper: 257.0
+        noise_lower: 0.2
+        noise_upper: 3
+    calib:
+      0:
+        pedestal_lower: 0
+        pedestal_upper: 386.0
+        noise_lower: 0.0
+        noise_upper: 3
+      1:
+        pedestal_lower: 0
+        pedestal_upper: 366.0
+        noise_lower: 0.0
+        noise_upper: 3
+    cm:
+      0:
+        pedestal_lower: 0
+        pedestal_upper: 74.0
+        noise_lower: 0.0
+        noise_upper: 3
+      1:
+        pedestal_lower: 0.0
+        pedestal_upper: 20
+        noise_lower: 0.0
+        noise_upper: 3
+      2:
+        pedestal_lower: 0.0
+        pedestal_upper: 20
+        noise_lower: 0.0
+        noise_upper: 3
+      3:
+        pedestal_lower: 0.0
+        pedestal_upper: 20
+        noise_lower: 0.0
+        noise_upper: 3
