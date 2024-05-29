@@ -22,75 +22,61 @@ print(ch)
 #ch_key = ["ch","cm","calib"]
 ch_total = [ch]
 ch_key = ["ch"]
+ch_type = [0]
 def make_plots(channel,configFile): #Heat map, here there will be only one channel per plot (the shape is expected to be pretty much the same for all channels anyway)
     #expandAllChannels.expandAllChannels(configFile,output)
     with open(configFile) as f:
         cfg = yaml.safe_load(f)
-    #calib_i =0
-    #cm_i    =0
-    #chan_i  =0 
     
-    dacb = []
-    #df = pd.read_csv('/home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/pedestal_adjustment_MalindaTB3/data/test/pedestal_scan/run_20240522_190858/dataPd.csv', index_col=0)
-    #df = pd.read_csv('/home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/pedestal_adjustment_MalindaTB3/data/test/pedestal_scan/run_20240523_140026/dataPd.csv', index_col=0)
-    #df = pd.read_csv('/home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/pedestal_adjustment_MalindaTB3/data/test/pedestal_scan/run_20240524_112745/dataPd.csv', index_col=0)
-    #df = pd.read_csv('/home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/pedestal_adjustment_MalindaTB3/data/test/pedestal_scan/run_20240524_161528/dataPd.csv', index_col=0)
-    df = pd.read_csv('/home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/pedestal_adjustment_MalindaTB3/data/test/pedestal_scan/run_20240527_103749/dataPd.csv', index_col=0)
-    print(df) 
-    column_headers_old = list(df.columns.values)
+    ped_analyzer.data = ped_analyzer.data.sort_values(by=["dacb","trim_inv"], ignore_index=True)
+    #print(ped_analyzer.data[(ped_analyzer.data['dacb']==0) & (ped_analyzer.data['trim_inv']==0)])
+    print(ped_analyzer.data)
+    dacb_val = ped_analyzer.data['dacb'].unique()
+    trim_val = ped_analyzer.data['trim_inv'].unique()
+    print("dacb values", dacb_val)   
+    print(type(dacb_val)) 
+
+    column_headers_old = list(ped_analyzer.data.columns.values)
     print("The Column Header old:", column_headers_old)    
 
-    #data frame cut for deciding first pedestal target half wise
-    #dacb_grad_0 = target_0
-    #Putting cuts for gradient not equal to 0 in both directions simultaneously (of course by fixing the other)
-    #First is for dacb keeping trim_inv fixed at 0, second is for trim_inv keeping dacb fixed at 0
-    
-    target_0_cut = df[df['channel']<36].loc[df[df['channel']<36].apply(lambda row: row['16'] > row['0'], axis=1), column_headers_old]
+    nhalf = ped_analyzer.data['half'].unique()
+    print("Number of halves",nhalf)
+    for half in range(len(nhalf)):
+        channel_half = ped_analyzer.data[(ped_analyzer.data['half']==half) & (ped_analyzer.data['channeltype']==0)]
+        trim_1_cut = channel_half[(channel_half['trim_inv']==trim_val[1]) & (channel_half['dacb']==dacb_val[0])].set_index('channel')
+        trim_0_cut = channel_half[(channel_half['trim_inv']==trim_val[0]) & (channel_half['dacb']==dacb_val[0])]
+        channel_target = channel_half[(channel_half['trim_inv']==32) & (channel_half['dacb']==0)].set_index('channel')
+        print(channel_target)
+        channel_target['triminv_grad'] = trim_1_cut['adc_median']-trim_0_cut['adc_median']
+        channel_cut = channel_target[channel_target['triminv_grad']>0]
+        print(channel_cut)
+        target = channel_target[channel_target['triminv_grad']>0]['adc_median'].median()
+        print(target)
 
-    data_grad_0 = pd.DataFrame()
-    data_grad_0['triminv_grad'] = df[df['channel']<36].loc[0]['16']-df[df['channel']<36].loc[0]['0']
+        #This gives all the channels in one of the halves (excluding cm and calib)
+        for channel in channel_cut.index: #This eliminates any whose second triminv entry is less than/equal to the first entry (adhoc gradient > 0 only)
 
-    plt.plot(df[df['channel']<36].channel[df[df['channel']<36].index ==0], data_grad_0.triminv_grad, marker='o',linestyle='none')
-    plt.savefig("/home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/pedestal_adjustment_MalindaTB3/triminv_grad0_%s.png"%channel)
+            print("Channel number",channel)
+            print("Channel type", channel_cut[channel_cut.index==channel]['channeltype'].item())
 
-    # | (target_0.loc[16]['0']>target_0.loc[0]['0'])
-    target_half_0 = target_0_cut.loc[0]['32'].median()
-    print(df[df['channel']<36])
-    print(target_0_cut)
-
-    print("Target for half 0",target_half_0)
-    print("Number of channels",len(df[df['channel']<36][df[df['channel']<36].index ==0]))
-
-    target_1_cut = df[(df['channel']>=36) & (df['channel']<72)].loc[df[(df['channel']>=36) & (df['channel']<72)].apply(lambda row: row['16'] > row['0'], axis=1), column_headers_old]
-
-    data_grad_1 = pd.DataFrame()
-    data_grad_1['triminv_grad'] = df[(df['channel']>=36) & (df['channel']<72)].loc[0]['16']-df[(df['channel']>=36) & (df['channel']<72)].loc[0]['0']
-
-    plt.plot(df[(df['channel']>=36) & (df['channel']<72)].channel[df[(df['channel']>=36) & (df['channel']<72)].index ==0], data_grad_1.triminv_grad, marker='o',linestyle='none')
-    plt.savefig("/home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/pedestal_adjustment_MalindaTB3/triminv_grad1_%s.png"%channel)
-
-    target_half_1 = target_1_cut.loc[0]['32'].median()
-    print(df[(df['channel']>=36) & (df['channel']<72)])
-    print(target_1_cut)
-    print("Target for half 1",target_half_1)
-
-    print("Number of channels",len(df[(df['channel']>=36) & (df['channel']<72)][df[(df['channel']>=36) & (df['channel']<72)].index ==0]))
-    
-    for i in range(len(ch_total)):
-        ch_loop = 0
-        
-        for channel in ch_total[i]:
-            grad  = (df[df.channel ==channel].loc[0]['16']-df[df.channel ==channel].loc[0]['0'])/(16-0)
-            offset = df[df.channel ==channel].loc[0]['16'] - 16*grad
-            grad_dacb = (df[df.channel ==channel].loc[16]['0']-df[df.channel ==channel].loc[0]['0'])/(16-0)
+            #Values for triminv and dacb gradient
+            ped_high = channel_half[(channel_half['channel'] ==channel) & (channel_half['trim_inv'] == 16) & (channel_half['dacb'] == 0)]['adc_median'].item()
+            ped_low = channel_half[(channel_half['channel'] ==channel) & (channel_half['trim_inv'] == 0) & (channel_half['dacb'] == 0)]['adc_median'].item()
+            ped_dacb_high = channel_half[(channel_half['channel'] ==channel) & (channel_half['trim_inv'] == 0) & (channel_half['dacb'] == 16)]['adc_median'].item()
+            
+            print("Pedestal Values for gradient", ped_high,ped_low)
+            grad  = (ped_high - ped_low)/(16-0)
+            #print("Value of gradient", grad)
+            offset = ped_high - 16*grad
+            #print(offset)
+            grad_dacb = (ped_dacb_high-ped_low)/(16-0)
+            
             print(round(grad,3),round(offset,3),round(grad_dacb,3))
+            print(target)
             flag=0
-  
+      
             try:  
-                if channel <36:
-                    intval = int((target_half_0-offset)/grad)
-                elif channel >=36 & channel < 72:
-                    intval = int((target_half_1-offset)/grad)
+                intval = int((target-offset)/grad)
                 dacbval = 0 #by default unless the intval overflows
             except (OverflowError, ValueError):
                 intval = 0
@@ -105,27 +91,30 @@ def make_plots(channel,configFile): #Heat map, here there will be only one chann
                 intval = 0
                 print("triminv lower limit")
 
+            '''
             cfg["roc_s0"]["sc"][ch_key[i]][ch_loop]["trim_inv"] = intval
+            cfg["roc_s0"]["sc"][ch_key[i]][ch_loop]["dacb"] = abs(dacbval)
             if dacbval >=0:
-                cfg["roc_s0"]["sc"][ch_key[i]][ch_loop]["dacb"] = dacbval
+                cfg["roc_s0"]["sc"][ch_key[i]][ch_loop]["sign_dac"] = 0
             elif dacbval < 0:
-                cfg["roc_s0"]["sc"][ch_key[i]][ch_loop]["dacb"] = -dacbval
                 cfg["roc_s0"]["sc"][ch_key[i]][ch_loop]["sign_dac"] = 1
             print(ch_key[i],ch_loop)
             ch_loop += 1
+            '''
             print("trim_inv value is ", intval)
             print("dacb value is ", dacbval)
-
+        
         #print("over")
+            print()
 
     #data frame cut for deciding first pedestal target half wise
     configFile0 = configFile[:configFile.find(".yaml")]
     
-    with open(configFile0+"_triminv_D8_4_new.yaml", "w") as o:
+    with open(configFile0+"_triminv_D8_12_new.yaml", "w") as o:
         yaml.dump(cfg, o)
-    print("Saved new config file as:"+configFile0+"_triminv_D8_4_new.yaml")        
-    
-    data_0 = df[df['channel']==channel].copy()
+    print("Saved new config file as:"+configFile0+"_triminv_D8_12_new.yaml")        
+    '''
+    data_0 = ped_analyzer.data[ped_analyzer.data['channel']==channel].copy()
     print(data_0)
     #dacb.append(data_0['dacb'])
 
@@ -137,8 +126,8 @@ def make_plots(channel,configFile): #Heat map, here there will be only one chann
 
     sb.heatmap(data_inter, annot=True)
     plt.savefig("/home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/pedestal_adjustment_MalindaTB3/triminv_dacb_%s.png"%channel)
-    print("Dacb values",dacb)
-
+    #print("Dacb values",dacb)
+    '''
 if __name__ == "__main__":
     from optparse import OptionParser
     parser = OptionParser()
@@ -180,4 +169,18 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
     print(options)
 
+    odir = '/home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/pedestal_adjustment_MalindaTB3/data/test/pedestal_scan/run_20240527_160313'
+    ped_analyzer = analyzer.pedestal_scan_analyzer(odir=odir)
+    files = glob.glob(odir + "/pedestal_scan*.root")
+    print(files)
+
+    for f in files:
+        ped_analyzer.add(f)
+
+    ped_analyzer.mergeData()
+    print(ped_analyzer.data)
+    
+    
+    #print(ped_analyzer.data[ped_analyzer.data['dacb']==0])
+    #print(ped_analyzer.data[(ped_analyzer.data['dacb']==48) & (ped_analyzer.data['trim_inv']==48)])
     make_plots(1,options.configFile)
