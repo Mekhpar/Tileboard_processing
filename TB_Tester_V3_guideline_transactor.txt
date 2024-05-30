@@ -1,0 +1,381 @@
+TB-Testerv2 with new SD card from Michael in June 22 - https://cernbox.cern.ch/index.php/s/QpZxa27iquTfbXR
+Updated 10.Oct.2022: hexactrl-script folder on TB-Testerv2 by copying the remote-PC version
+IP 10.254.56.35, MAC address 80:1f:12:3a:a4:00
+####
+For new DAQ PCs (remote PC):
+ssh-keygen -R <ip-address>  # just for the first time on a new PC
+####
+To copy a new (complete: boot and root partition) image to an SD card:
+sudo gunzip -c testerV2_22_6_16.img.tgz | sudo dd of=/dev/sda
+####
+Log on to TB tester from remote PC with
+ssh HGCAL_dev@10.254.56.35 -L 8080:localhost:8080   (DESY)=======use this to ssh to the tester
+ssh HGCAL_dev@192.168.200.33 -L 8080:localhost:8080   (new DESY)
+ssh HGCAL_dev@128.141.149.75 -L 8080:localhost:8080 (CERN - direct)
+you can use the name on the cern network (ssh HGCAL_dev@TBT564669)
+
+####
+LOAD FIRMWARE (TB-Testerv2):
+=========================================================Step 1
+sudo fw-loader load tileboard-tester-v2p0
+(sudo ./gpio_i2c_chmod.sh) 
+sudo chmod og+rw /dev/gpiochip*
+=========================================================
+
+ls /sys/class/uio/
+this should print 
+uio0  uio1  uio10  uio11  uio12  uio13  uio14  uio15  uio16  uio17  uio18  uio2  uio3  uio4  uio5  uio6  uio7  uio8  uio9
+
+If the bit files are not present:
+cd /home/HGCAL_dev/fw/tileboard-tester-v2p0
+unxz tileboard-tester-v2p0.bit.xz --keep
+#and then execute again "load firmware" part
+But: There is no folder /home/HGCAL_dev/fw/tileboard-tester-v2p0 being created.
+It seems to work without this step - so probably the firmware doesn't need this hack.
+####
+SLOW/FAST CONTROLS
+with the new software, all the binaries files are in: /opt/hexactrl/ROCv2-dev/bin
+the software source is: /opt/hexactrl/ROCv2-dev/etc
+
+COMMANDS TO BE EXECUTED ON THE TESTER:
+
+1) FAST CONTROLS:
+=============================================================Step 2
+    cd /home/HGCAL_dev/sw/hexactrl-sw_May2024_TestBeam
+    source /opt/hexactrl/ROCv3-0811/etc/env.sh
+    /opt/hexactrl/ROCv3-0811/bin/daq-server
+=============================================================
+
+2) SLOW CONTROLS (open a new terminal and ssh in the tester):
+==============================================================Step 3
+    cd /home/HGCAL_dev/sw/hexactrl-sw_May2024_TestBeam/zmq_i2c
+    python3 zmq_server.py
+=============================================================
+    if you got the following error: PermissionError: [Errno 13] Permission denied: '/dev/gpiochip3'
+    execute the command 'sudo chmod og+rw /dev/gpiochip*' as described in the LOAD FIRMWARE section
+
+in case you need to do measurements on the tester:
+3) STARTING THE CLIENT (open a third terminal and ssh in the tester):
+####
+STARTING CLIENT ON THE PC:
+with the new software, all the binaries files are in: /opt/hexactrl/ROCv3-0811/bin
+the software source is: /opt/hexactrl/ROCv3-0811/etc
+
+start zmq-client for ROCv3:
+from hexactrl-folder open terminal:
+===========================================================Step 4
+cd /home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw
+source /opt/hexactrl/ROCv3-0811/ctrl/etc/env.sh 
+/opt/hexactrl/ROCv3-0811/bin/daq-client
+===========================================================
+
+
+
+Checking for elinks alignment: (first ssh into the TBtester)
+==============================================================
+cd /home/HGCAL_dev/sw/hexactrl-sw_May2024_TestBeam
+python3 debug_tools/align_link.py -t daq -l link0,link1 -d 100 -s 50
+
+python3 debug_tools/capture.py -t daq -l link0,link1
+
+===============================================================
+
+
+####
+TAKING MEASUREMENTS ON THE PC:
+============================================================================Step 5
+cd /home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script
+source /opt/hexactrl/ROCv3-0811/ctrl/etc/env.sh 
+
+TB3_SlowControl.py:
+===================================================================Slow control.py=============Step 6
+python3 TB3_SlowControl.py -f configs/sipm_roc0_onbackup0_gainconv12_pre_series_TB_testing.yaml -i 10.254.56.35 -d TB3_D8_10 -v 4V -I
+
+==============================================================================================
+
+pedestal run:
+=====================================================================================================Step 7
+python3 pedestal_run.py -f configs/sipm_roc0_onbackup0_gainconv12_pre_series_TB_testing.yaml -i 10.254.56.35 -d test -I
+
+==============================================================================================
+
+
+delay scan:
+====================================================================================================Step 8
+python3 delay_scan.py -f  configs/sipm_roc0_onbackup0_gainconv12_pre_series_TB_testing.yaml -i 10.254.56.35 -d test -I
+
+==============================================================================================
+
+
+LED SCAN:
+===================================================================LED scan==================Step 9
+python3 LED_scan_MODTEST.py -f configs/sipm_roc0_onbackup0_gainconv12_pre_series_TB_testing.yaml -i 10.254.56.35 -d test -I
+
+==============================================================================================
+
+
+==================================================External trigger======================Step 10
+cd /home/HGCAL_dev/sw/hexactrl-sw_May2024_TestBeam/hexactrl-script/trigger_xbar_sw
+python3 setup_xbar_test_April2024.py -t 777
+
+==============================================================================================
+
+
+==============================================================sampling scan=============Step 11 (to check the phase)
+python3 sampling_scan_int_conv_mat.py -f configs/sipm_roc0_onbackup0_gainconv12_pre_series_TB_testing.yaml -i 10.254.56.35 -d test -I
+
+====================================================================================================================
+
+
+===============================================================Beam run=======================Step 12
+python3 beam_run_test_May2024.py -f configs/ -i 10.254.56.35 -d test -I
+
+====================================================================================================================
+
+
+
+
+
+
+
+
+
+====================================================================================================================
+====================================================================================================================
+====================================================================================================================
+====================================================================================================================
+====================================================Back up=========================================================
+====================================================================================================================
+====================================================================================================================
+====================================================================================================================
+====================================================================================================================
+====================================================================================================================
+
+
+
+
+
+
+
+pedestal alignment:
+================================================================================================
+python3 pedestal_adjustment_Damien_modified/sipm_calibration_test.py -d test -f configs/initial_full_config_reasonable_noise_in_old_DAQ.yaml --gain_conv 4 -i 10.254.56.35 -I
+================================================================================================
+
+
+
+ 
+requires to have roc_defaultconfig_TB2.yaml in hexactrl-scripts/configs/
+
+execute the scripts you need (all of the should be up-to-date):
+
+
+
+
+
+
+
+
+
+pedestal adjustment
+==========================================pedestal adjustment==============================
+cd /home/reinecke/Desktop/software_test_Jia-Hao/hexactrl-sw/hexactrl-script_TB_23_08
+
+python3 pedestal_adjustment_Damien_modified/sipm_calibration_test.py -d TB3_D8_1/Threshold_tuning -f configs/TB3p1_D8_Board1/sipm_roc0_onbackup0_gainconv4_Dacb_vb_conv5_trimtoa_trimtot_after_pedestal_adjustment.yaml --gain_conv 4 -i 10.254.56.35 -I
+
+
+
+
+python3 pedestal_adjustment_Damien_modified/sipm_calibration_test.py -d TB3p1_A5_1 -f configs/TB3p1_A5_Board1/sipm_roc0_onbackup0_gainconv4_after_pedestal_alignment.yaml --gain_conv 4 -i 10.254.56.35 -I
+=============================================================================
+
+
+
+
+- source ped_corr/pedestal_correction_full.sh 10.254.56.35 data configs/roc_config_ConvGain0
+
+External scan
+python3 sampling_scan_ext.py -f configs/roc_config_ConvGain12_SiPM_cpython3 pedestal_run.py -f configs/roc_config_ConvGain12_SPS.yaml -i 10.254.56.35 -d DESYTB_May23 -Iurrent_measurement_MiniTileboard.yaml -i 10.254.56.35 -d SPS_miniTB_27042023 -I
+
+=============================================================================
+roc_config_ConvGain12_SiPM_current_measurement_MiniTileboard.yaml
+
+
+
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<For external trigger>>>>>>>>>>>>>>>>>>>>>>>>>
+===============================================================Step 6
+Configure the external trigger firmware block:
+Input to the Tester: the input LEMO cable of the mezzanine goes closer to the power connection (J2) 
+Open a terminal and ssh in to the TB tester
+
+
+========================================================================
+cd /home/HGCAL_dev/sw/hexactrl-sw_May2024_TestBeam/hexactrl-script/trigger_xbar_sw
+python3 setup_xbar_test_April2024.py -t 777
+
+
+
+
+python3 setup_xbar.py -t 777
+========================================================================
+
+The configuration is set for:
+ext_trig_3 -> self_trig
+self_trig -> fc_encoder_extL1A_0
+
+===============================================================
+
+===============================================================Step 7
+Run the scripts Arnaud gave us for the testbeam
+* The l1offsetscan_May2023.py scan the L1Offset parameter (position in HGCROC memory buffer to send when it receives L1As).
+* You should use the L1Offset parameter value which gives largest energy in our module in the beam_run_May2023.py script
+* Use "-h" to see what option we can use for these scripts
+* They use similar arguments like the pedestal_run.py script
+
+On the PC side
+
+
+####python3 l1offsetscan_May2023.py -f configs/TB3p1_G8_Board1/sipm_roc0_onbackup0_gainconv4_trimtoaNEW_TB3_G8_Board1_beam_run.yaml -i 10.254.56.35 -d test -I
+
+==============================================================sampling scan==============================to check the phase
+python3 sampling_scan_int_conv_mat.py -f configs/sipm_roc0_onbackup0_gainconv12_pre_series_TB_testing.yaml -i 10.254.56.35 -d test -I
+====================================================================================================================
+
+===============================================================Beam run=======================
+cd /home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script
+source /opt/hexactrl/ROCv3-0811/ctrl/etc/env.sh
+
+python3 beam_run_test_May2024.py -f configs/ -i 10.254.56.35 -d test -I
+
+
+
+
+
+
+python3 beam_run_Aug2023.py -f configs/ -i 10.254.56.35 -d test -I
+
+=================================================================
+
+
+===============================================================TOT/TOA threshold scan=======================
+
+    
+===============================================for TOA threshold scan:
+Step 1. Do pedestal alignment
+ - cd /home/reinecke/Desktop/software_test_Jia-Hao/hexactrl-sw/hexactrl-script_TB_23_08
+ - python3 pedestal_adjustment_Damien_modified/sipm_calibration_test.py -d test -f configs/roc_config_ConvGain1_1ROCs_swamp_test.yaml --gain_conv 4 -i 10.254.56.35 -I
+
+
+Step 2. Check position of TOA thresholds with TOA scan across the pedestals.
+ - python3 toa_vref_scan_noinj_mat_TB_23_08.py -f configs/TB3p1_D8_Board1/sipm_roc0_onbackup0_gainconv4_Dacb_vb_conv5_trimtoa_trimtot_after_pedestal_adjustment.yaml -i 10.254.56.35 -d TB3_D8_1/Threshold_tuning_2 -I
+
+After finishing the run, set Toa_vref to the lowest "useful" value in the config yaml file. 
+
+
+Step 3. sampling scan to find optimal phase
+ - python3 sampling_scan_int_conv_mat.py -f configs/TB3p1_D8_Board1/sipm_roc0_onbackup0_gainconv4_Dacb_vb_conv5_trimtoa_trimtot_after_pedestal_adjustment.yaml -i 10.254.56.35 -d TB3_D8_1/Threshold_tuning_2 -I
+
+====Step 4. Adjust channel wise trim toa
+To scan with charge injection (conveyor) across TOA threshold.
+For groups of channels, adjust channels and scan range in python script.
+ - Change "phase" in "two" python scripts (sipm_vreftoa_scurvescan_conv_mat_TB_23_08.py, sipm_injection_scan_conv_mat_TB_23_08.py)
+ 
+ - python3 sipm_vreftoa_scurvescan_conv_mat_TB_23_08.py -f configs/TB3p1_D8_Board1/sipm_roc0_onbackup0_gainconv4_Dacb_vb_conv5_trimtoa_trimtot_after_pedestal_adjustment.yaml -i 10.254.56.35 -d TB3_D8_1/Threshold_tuning_2 -I
+
+Reepat Step 2. to check if the Toa_vref value are OK.
+
+================================================for TOT threshold scan:
+ -using charge injection: 
+    python3 tot_threshold_scan_sipm_TB_23_08.py -f configs/TB3p1_D8_Board1/sipm_roc0_onbackup0_gainconv4_Dacb_vb_conv5_trimtoa_trimtot_after_pedestal_adjustment.yaml -i 10.254.56.35 -d TB3_D8_1/Threshold_tuning_2 -I
+    
+ -using beam data:
+    python3
+
+
+
+=================================================================
+python3 sipm_injection_scan_conv_mat_TB_23_08.py -f configs/TB3p1_A5_Board1/sipm_roc0_onbackup0_gainconv4_after_pedestal_alignment.yaml -i 10.254.56.35 -d TB3p1_A5_1/ -I
+
+python3 sipm_injection_scan_conv_mat_TB_23_08.py -f configs/TB3p1_D8_Board1/sipm_roc0_onbackup0_gainconv4_Dacb_vb_conv5_trimtoa_trimtot_after_pedestal_adjustment.yaml -i 10.254.56.35 -d TB3_D8_1/Threshold_tuning_2 -I
+
+
+
+
+
+
+####
+FROM RAW TO ASCII USING THE UNPACK:
+cd /home/reinecke/TBTesterv2_ROCv3/hexactrl-sw
+source /opt/hexactrl/ROCv3-dev/ctrl/etc/env.sh
+/opt/hexactrl/ROCv2-dev/bin/unpack -i **RAW INPUT FILE (any .raw produced-->they are generally
+in the repository /home/reinecke/TB_Tester_V2_0812/hexactrl-sw/hexactrl-script/data** -o **OUTPUT DIRECTORY-->best is to choose the same directory of the raw input file** -t text
+
+/opt/hexactrl/ROCv3/bin/unpack -i hexactrl-script/data/test/pedestal_run/run_20221221_160431/pedestal_run0.raw -o hexactrl-script/data/test/pedestal_run/run_20221221_160431/ASCIIout -t text
+
+To convert multiple raw-data files of a parameter-scan (e.g. sampling scan) goto 
+1. /home/reinecke/TBTesterv2_ROCv3/hexactrl-sw/hexactrl-script
+2. open converter_ASCII.sh and enter the correct path of the scan (result data) to be converted.
+2b. open converter_ASCII_LED.sh for LED sampling scans with results in subfolders and do as in 2. 
+3. open a terminal in /hexactrl-script/ and first: 'source etc/env' and then do 'source converter_ASCII.sh' (bash script from Malinda). 
+It creates one sub-folder per parameter value and puts the respective ASCII files into them (as KCU DAQ output).
+
+
+If the SD card does not work, e.g. firmware is not loaded:
+1) plug the SD card into the reader
+
+2) from terminal, unmount both partition by executing these commands from terminal:
+   $ sudo umount /dev/sda1
+   $ sudo umount /dev/sda2
+you can check if the partitions are unmounted with these commands from terminal:
+   $lsblk
+this will display the list of all devices and if the sda partitions are well unmounted, you should see an empty MOUNTPOINT column in correspondence to sda
+
+3) repair the filesystem in the partitions by executing these :
+   $ sudo fsck -a /dev/sda1
+   $ sudo fsck /dev/sda2
+
+4) safely unplugged the sda card --> do not unplug it directly (it may be the cause of the corruption of the filesystem) but remove it safely!
+
+
+
+Change firmware version:
+sudo yum remove tileboard-tester-v2p0
+sudo yum localinstall firmware_you_want_to_install.rpm
+
+How to check firmware version:
+sudo yum list installed
+
+===========================================================================
+How to use Matthias' test beam app to quickly look at results
+ 
+ssh hgcal@ftxhgcal2 -XY -L 5006:localhost:5006
+cd Desktop/testbeam-app/
+export PATH=$PWD/env/bin:$PATH
+source activate tb
+export QLDATA=<path to data>
+bokeh serve quickLook.py
+
+
+
+
+
+How to mount the folder from a remote PC:
+sshfs hgcal@ftxhgcal2.desy.de:/home/reinecke/ /home/lijiahao/Desktop/HGCALTBPC
+How to unmount:
+fusermount -u /home/lijiahao/Desktop/HGCALTBPC
+
+
+-------how to stop the client if it says someone is already using it and cannot start------
+ps aux | grep daq-client
+kill -9 "id" #------------------------5368 can be changed
+ps aux | grep daq-client
+------------------------------------------------------------------------------------------
+
+
+configs/TB3p1_D8_Board1/sipm_roc0_onbackup0_gainconv4_trimtoa_trimtot.yml
+
+
+
+==================================How to mount folder in SD card to PC=========================================
+sudo sshfs -o allow_other,default_permissions HGCAL_dev@10.254.56.35:/ ~/testerV2_mount
+    
