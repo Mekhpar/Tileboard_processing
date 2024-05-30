@@ -28,106 +28,102 @@ def make_plots(channel,configFile): #Heat map, here there will be only one chann
     with open(configFile) as f:
         cfg = yaml.safe_load(f)
     
-    ped_analyzer.data = ped_analyzer.data.sort_values(by=["dacb","trim_inv"], ignore_index=True)
-    #print(ped_analyzer.data[(ped_analyzer.data['dacb']==0) & (ped_analyzer.data['trim_inv']==0)])
-    print(ped_analyzer.data)
-    dacb_val = ped_analyzer.data['dacb'].unique()
-    trim_val = ped_analyzer.data['trim_inv'].unique()
-    print("dacb values", dacb_val)   
-    print(type(dacb_val)) 
+    nchip = ped_analyzer.data['chip'].unique()
+    for chip in nchip:
+        print("ROC number",chip)
+        channel_chip = ped_analyzer.data[ped_analyzer.data['chip']==chip].copy()
 
-    column_headers_old = list(ped_analyzer.data.columns.values)
-    print("The Column Header old:", column_headers_old)    
+        channel_chip = channel_chip.sort_values(by=["dacb","trim_inv"], ignore_index=True)
+        #print(channel_chip[(channel_chip['dacb']==0) & (channel_chip['trim_inv']==0)])
+        #print(channel_chip)
+        dacb_val = channel_chip['dacb'].unique()
+        trim_val = channel_chip['trim_inv'].unique()
+        print("dacb values", dacb_val)   
+        print(type(dacb_val)) 
 
-    nhalf = ped_analyzer.data['half'].unique()
-    print("Number of halves",nhalf)
-    for half in range(len(nhalf)):
-        channel_half = ped_analyzer.data[(ped_analyzer.data['half']==half) & (ped_analyzer.data['channeltype']==0)]
-        trim_1_cut = channel_half[(channel_half['trim_inv']==trim_val[1]) & (channel_half['dacb']==dacb_val[0])].set_index('channel')
-        trim_0_cut = channel_half[(channel_half['trim_inv']==trim_val[0]) & (channel_half['dacb']==dacb_val[0])]
-        channel_target = channel_half[(channel_half['trim_inv']==32) & (channel_half['dacb']==0)].set_index('channel')
-        print(channel_target)
-        channel_target['triminv_grad'] = trim_1_cut['adc_median']-trim_0_cut['adc_median']
-        channel_cut = channel_target[channel_target['triminv_grad']>0]
-        print(channel_cut)
-        target = channel_target[channel_target['triminv_grad']>0]['adc_median'].median()
-        print(target)
+        column_headers_old = list(channel_chip.columns.values)
+        print("The Column Header old:", column_headers_old)    
+        grad_trim_high = 2.5
+        grad_trim_low = 0.5
 
-        #This gives all the channels in one of the halves (excluding cm and calib)
-        for channel in channel_cut.index: #This eliminates any whose second triminv entry is less than/equal to the first entry (adhoc gradient > 0 only)
+        grad_dacb_high = 8
+        grad_dacb_low = 0.5
 
-            print("Channel number",channel)
-            print("Channel type", channel_cut[channel_cut.index==channel]['channeltype'].item())
+        nhalf = channel_chip['half'].unique()
+        print("Number of halves",nhalf)
+        for half in nhalf:
+            channel_half = channel_chip[(channel_chip['half']==half) & (channel_chip['channeltype']==0)]
+            channel_target = channel_half[(channel_half['trim_inv']==32) & (channel_half['dacb']==0)].set_index('channel')
 
-            #Values for triminv and dacb gradient
-            ped_high = channel_half[(channel_half['channel'] ==channel) & (channel_half['trim_inv'] == 16) & (channel_half['dacb'] == 0)]['adc_median'].item()
-            ped_low = channel_half[(channel_half['channel'] ==channel) & (channel_half['trim_inv'] == 0) & (channel_half['dacb'] == 0)]['adc_median'].item()
-            ped_dacb_high = channel_half[(channel_half['channel'] ==channel) & (channel_half['trim_inv'] == 0) & (channel_half['dacb'] == 16)]['adc_median'].item()
-            
-            print("Pedestal Values for gradient", ped_high,ped_low)
-            grad  = (ped_high - ped_low)/(16-0)
-            #print("Value of gradient", grad)
-            offset = ped_high - 16*grad
-            #print(offset)
-            grad_dacb = (ped_dacb_high-ped_low)/(16-0)
-            
-            print(round(grad,3),round(offset,3),round(grad_dacb,3))
+            trim_1_cut = channel_half[(channel_half['trim_inv']==trim_val[1]) & (channel_half['dacb']==dacb_val[0])].set_index('channel')
+            trim_0_cut = channel_half[(channel_half['trim_inv']==trim_val[0]) & (channel_half['dacb']==dacb_val[0])]
+
+            dacb_1_cut = channel_half[(channel_half['trim_inv']==trim_val[0]) & (channel_half['dacb']==dacb_val[1])].set_index('channel')
+            dacb_0_cut = channel_half[(channel_half['trim_inv']==trim_val[0]) & (channel_half['dacb']==dacb_val[0])]
+
+            channel_target['trim_grad'] = (trim_1_cut['adc_median']-trim_0_cut['adc_median'])/(trim_val[1]-trim_val[0])
+            channel_target['dacb_grad'] = (dacb_1_cut['adc_median']-dacb_0_cut['adc_median'])/(dacb_val[1]-dacb_val[0])
+            #In this case, this is the y intercept of triminv
+            channel_target['offset'] = trim_1_cut['adc_median'] - trim_val[1]*channel_target['trim_grad'] #Warning 3
+            channel_cut = channel_target[(channel_target['trim_grad'] > grad_trim_low*4/4) & (channel_target['trim_grad'] < grad_trim_high*4/4) & (channel_target['dacb_grad'] > grad_dacb_low*4/4) & (channel_target['dacb_grad'] < grad_dacb_high*4/4)]
+            #channel_cut = channel_target #Just for debugging the bad channels
+            #print(channel_cut)
+            target = channel_target[channel_target['trim_grad']>0]['adc_median'].median()
             print(target)
-            flag=0
-      
-            try:  
-                intval = int((target-offset)/grad)
-                dacbval = 0 #by default unless the intval overflows
-            except (OverflowError, ValueError):
-                intval = 0
-                flag=1
 
-            if intval >= 64:
-                dacbval = int((intval - 63)*grad/grad_dacb)
-                intval = 63
-                print("triminv upper limit")
-            elif intval < 0:
-                dacbval = int((intval - 0)*grad/grad_dacb)
-                intval = 0
-                print("triminv lower limit")
+            channel_mod = channel_cut.copy()
+            #for channel in channel_cut.index:
+            channel_mod['trim'] = (target-channel_cut['offset'])/channel_cut['trim_grad'] #Warning 4
+            #Default values for dacb and sign_dac before calculating triminv limits
+            channel_mod['dacb_fit'] = 0
+            channel_mod['signdac'] = 0
+            
+            channel_mod_2 = channel_mod.copy()
+            
+            #Rounding off to the nearest integer for triminv
+            channel_mod_2.loc[channel_mod_2['trim'] % 1 < 0.5,'trim'] = channel_mod['trim'].apply(lambda x: math.floor(x)) #Warning 5
+            #channel_cut.loc[channel_cut['trim'] % 1 < 0.5,'trim'] = channel_cut.loc[channel_cut['trim'] % 1 < 0.5,'trim'].apply(lambda x: math.floor(x))
+            channel_mod_2.loc[channel_mod_2['trim'] % 1 >= 0.5,'trim'] = channel_mod['trim'].apply(lambda x: math.ceil(x)) #Warning 6
 
-            '''
-            cfg["roc_s0"]["sc"][ch_key[i]][ch_loop]["trim_inv"] = intval
-            cfg["roc_s0"]["sc"][ch_key[i]][ch_loop]["dacb"] = abs(dacbval)
-            if dacbval >=0:
-                cfg["roc_s0"]["sc"][ch_key[i]][ch_loop]["sign_dac"] = 0
-            elif dacbval < 0:
-                cfg["roc_s0"]["sc"][ch_key[i]][ch_loop]["sign_dac"] = 1
-            print(ch_key[i],ch_loop)
-            ch_loop += 1
-            '''
-            print("trim_inv value is ", intval)
-            print("dacb value is ", dacbval)
-        
-        #print("over")
-            print()
 
+            #print(channel_target)
+            
+            channel_mod_3 = channel_mod_2.copy()
+
+            channel_mod_3.loc[channel_mod_3['trim'] > 64, 'dacb_fit'] = (channel_mod_2['trim'] - 63)*channel_mod_2['trim_grad']/channel_mod_2['dacb_grad'] #Warning 7
+            channel_mod_3.loc[channel_mod_3['trim'] < 0, 'dacb_fit'] = (channel_mod_2['trim'] - 0)*channel_mod_2['trim_grad']/channel_mod_2['dacb_grad'] #Warning 8
+
+            channel_mod_3.loc[channel_mod_3['trim'] > 64, 'trim'] = 63
+            channel_mod_3.loc[channel_mod_3['trim'] < 0, 'trim'] = 0
+            
+            channel_mod_4 = channel_mod_3.copy()
+
+            channel_mod_4.loc[channel_mod_4['dacb_fit'] < 0, 'signdac'] = 1 #Warning 9
+            channel_mod_4.loc[channel_mod_4['dacb_fit'] < 0, 'dacb_fit'] = -channel_mod_3['dacb_fit']
+
+            channel_mod_5 = channel_mod_4.copy()
+
+            #Rounding off to the nearest integer for dacb
+            channel_mod_5.loc[channel_mod_5['dacb_fit'] % 1 < 0.5,'dacb_fit'] = channel_mod_4['dacb_fit'].apply(lambda x: math.floor(x)) #Warning 11
+            channel_mod_5.loc[channel_mod_5['dacb_fit'] % 1 >= 0.5,'dacb_fit'] = channel_mod_4['dacb_fit'].apply(lambda x: math.ceil(x)) #Warning 12
+
+            channel_mod_5.loc[abs(channel_mod_5['dacb_fit']) > 63 , 'dacb_fit'] = 0
+            print(channel_mod_5)
+
+            for channel in channel_mod_5.index:
+                cfg["roc_s0"]["sc"]["ch"][channel]["trim_inv"] = int(channel_mod_5.loc[channel,'trim'])
+                cfg["roc_s0"]["sc"]["ch"][channel]["dacb"] = int(channel_mod_5.loc[channel,'dacb_fit'])
+                cfg["roc_s0"]["sc"]["ch"][channel]["sign_dac"] = int(channel_mod_5.loc[channel,'signdac'])
+            
     #data frame cut for deciding first pedestal target half wise
     configFile0 = configFile[:configFile.find(".yaml")]
     
-    with open(configFile0+"_triminv_D8_12_new.yaml", "w") as o:
+    
+    with open(configFile0+"_triminv_D8_11_new.yaml", "w") as o:
         yaml.dump(cfg, o)
-    print("Saved new config file as:"+configFile0+"_triminv_D8_12_new.yaml")        
-    '''
-    data_0 = ped_analyzer.data[ped_analyzer.data['channel']==channel].copy()
-    print(data_0)
-    #dacb.append(data_0['dacb'])
+    print("Saved new config file as:"+configFile0+"_triminv_D8_11_new.yaml")   
+    
 
-
-    data_inter = data_0.drop("channel", axis='columns')
-    column_headers = list(data_inter.columns.values)
-    print("The Column Header :", column_headers)    
-    print(data_inter)
-
-    sb.heatmap(data_inter, annot=True)
-    plt.savefig("/home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/pedestal_adjustment_MalindaTB3/triminv_dacb_%s.png"%channel)
-    #print("Dacb values",dacb)
-    '''
 if __name__ == "__main__":
     from optparse import OptionParser
     parser = OptionParser()
@@ -169,7 +165,9 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
     print(options)
 
-    odir = '/home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/pedestal_adjustment_MalindaTB3/data/test/pedestal_scan/run_20240527_160313'
+    #odir = '/home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/pedestal_adjustment_MalindaTB3/data/test/pedestal_scan/run_20240528_135349'
+    odir = '/home/reinecke/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/pedestal_adjustment_MalindaTB3/data/test/pedestal_scan/run_20240528_135323_alice' 
+    #This is the D8_11 board which has at least one negative dacb (channel 4 half 0) so this is for exception checks
     ped_analyzer = analyzer.pedestal_scan_analyzer(odir=odir)
     files = glob.glob(odir + "/pedestal_scan*.root")
     print(files)
@@ -180,7 +178,4 @@ if __name__ == "__main__":
     ped_analyzer.mergeData()
     print(ped_analyzer.data)
     
-    
-    #print(ped_analyzer.data[ped_analyzer.data['dacb']==0])
-    #print(ped_analyzer.data[(ped_analyzer.data['dacb']==48) & (ped_analyzer.data['trim_inv']==48)])
     make_plots(1,options.configFile)
