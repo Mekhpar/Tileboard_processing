@@ -258,7 +258,8 @@ class i2cController(zmqController):
                 print ("Low range and high range NOT reset")        
         elif process == 'ext':
             pass #Do nothing
-            print ("Low range and high range NOT reset")        
+            print ("Low range and high range NOT reset")   
+	self.configure(yamlNode=nestedConf.to_dict())
 
 class daqController(zmqController):
     def start(self):
