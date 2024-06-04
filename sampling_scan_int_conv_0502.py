@@ -57,7 +57,7 @@ def sampling_scan(i2csocket,daqsocket, clisocket, basedir,device_name, device_ty
     
     daqsocket.daq_sampling_scan_settings(active_menu = 'calibAndL1A', num_events = 500, calibType = 'CALPULINT', lengthCalib = 1, lengthL1A = 1, bxCalib = calibreq, bxL1A = 20, prescale = 0, repeatOffset = 0)
     #Some settings like BXL1A = 20 are generalized here and will be overriden the scan loop later
-    
+    daqsocket.configure()
     (gain, calib, injectedChannels) = misc_func.injection_config_assign_internal(injectionConfig) #Constructor of sorts for the internal injection case (both preamp and conveyor)
     
     print("gain = %i" %gain)
