@@ -109,7 +109,7 @@ def Sampling_scan(i2csocket,daqsocket, clisocket, extra_text, basedir,device_nam
     
     daqsocket.daq_sampling_scan_settings(active_menu = active_menu, num_events = num_events, calibType = 'CALPUL' + process.upper(), lengthCalib = 1, lengthL1A = 1, bxCalib = calibreq, bxL1A = 20, prescale = 0, repeatOffset = 0)
     #Some settings like BXL1A = 20 are generalized here and will be overriden the scan loop later
-    
+    daqsocket.configure()
 
     #pre_injection
     (calib_preamp, calib_conv, IntCtest, choice_cinj, cmd_120p, L_g2, L_g1, L_g0, H_g2, H_g1, H_g0) = misc_func.configure_injection_assign(pre_injection)
