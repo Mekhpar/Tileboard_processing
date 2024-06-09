@@ -7,11 +7,11 @@ from time import sleep
 
 def pedestal_run_analysis(basedir,device_name,device_type,device_size,directory_index,suffix=""): #device_size is for the main type of boards i.e. TB3_D8 and not TB3_D8_11 or number of board
     	
-    testName = "pedestal"
+    testName = "pedestal_run"
     odir = "%s/%s/%s/%s_%s_%s/"%( os.path.realpath(basedir), device_name,device_type,testName,device_type,directory_index)
     '''
     try:
-        ped_analyzer = analyzer.pedestal_run_analyzer(odir=odir)
+        ped_analyzer = analyzer.overall_analyzer(odir=odir)
         print("Output directory for analysis and making plots is",odir)
         files = glob.glob(odir+"/*.root")
     	
@@ -20,7 +20,7 @@ def pedestal_run_analysis(basedir,device_name,device_type,device_size,directory_
     
         ped_analyzer.mergeData()
         
-        pedestal_event_analyzer = analyzer.ped_event_analyzer(fin=odir+"pedestal_run0.root") #This is reading from the unpacker/hgcroc tree instead of the summary tree
+        pedestal_event_analyzer = analyzer.event_analyzer(fin=odir+"pedestal_run0.root") #This is reading from the unpacker/hgcroc tree instead of the summary tree
         corruption_percentage_half = pedestal_event_analyzer.check_corruption(pass_limit = 0.1, fail_limit = 0.2, fout = odir + "analysis_summary_new.yaml")
         #pedestal_event_analyzer.check_corruption(pass_limit = 0.1, fail_limit = 0.2)
 
@@ -36,16 +36,15 @@ def pedestal_run_analysis(basedir,device_name,device_type,device_size,directory_
             fout.write("pedestal_run analysis went wrong and crash\n")
             fout.write("Error {0}\n".format(str(e)))
     '''
-    ped_analyzer = analyzer.pedestal_run_analyzer(odir=odir)
+    ped_analyzer = analyzer.overall_analyzer(odir=odir)
     print("Output directory for analysis and making plots is",odir)
     files = glob.glob(odir+"/*.root")
-	
     for f in files:
 	    ped_analyzer.add(f)
 
     ped_analyzer.mergeData()
     
-    pedestal_event_analyzer = analyzer.ped_event_analyzer(fin=odir+"pedestal_run0.root") #This is reading from the unpacker/hgcroc tree instead of the summary tree
+    pedestal_event_analyzer = analyzer.event_analyzer(fin=odir+"pedestal_run0.root") #This is reading from the unpacker/hgcroc tree instead of the summary tree
     corruption_percentage_half = pedestal_event_analyzer.check_corruption(pass_limit = 0.1, fail_limit = 0.2, fout = odir + "analysis_summary_new.yaml")
     print(corruption_percentage_half)
     
@@ -58,13 +57,13 @@ def pedestal_run_analysis(basedir,device_name,device_type,device_size,directory_
             print("Take pedestal data once more")
             
         elif corruption_percentage_half[chip] ==2: #Here we proceed to actually do the check of the individual channels
-            ped_analyzer.channel_ped_check(device_size)
+            ped_analyzer.channel_ped_check(device_size,fout = odir + "analysis_summary_new.yaml")
             
-    '''
+    
     ped_analyzer.makePlots()
     ped_analyzer.addSummary()
     ped_analyzer.writeSummary()
-    '''    
+    
     
     return odir
 
