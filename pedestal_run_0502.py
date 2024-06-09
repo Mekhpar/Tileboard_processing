@@ -1,7 +1,7 @@
 import zmq, datetime,  os, subprocess, sys, yaml, glob
 
 import myinotifier,util
-import analysis.level0.pedestal_run_analysis as analyzer
+
 import zmq_controler as zmqctrl
 import miscellaneous_functions as misc_func
 from nested_dict import nested_dict 
@@ -37,6 +37,9 @@ def pedestal_run(i2csocket,daqsocket, clisocket, basedir,device_name,device_type
 
 
 if __name__ == "__main__":
-    options = misc_func.options_run()#This will be constant for every test irrespective of the type of test
+    parser = misc_func.options_run()#This will be constant for every test irrespective of the type of test
+    (options, args) = parser.parse_args()
+    print(options)
+    
     (daqsocket,clisocket,i2csocket) = zmqctrl.pre_init(options)
     pedestal_run(i2csocket,daqsocket,clisocket,options.odir,options.dut,options.device_type,suffix=options.suffix)
