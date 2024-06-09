@@ -5,11 +5,15 @@ import seaborn as sns
 sns.set_style("ticks")
 from matplotlib.ticker import MultipleLocator
 import yaml, os
+from typing import List
+
+import analysis.level0.miscellaneous_analysis_functions as analysis
 from nested_dict import nested_dict
 import pandas as pd
 import numpy as np
+import copy
 
-class ped_event_analyzer(rawroot_reader):
+class event_analyzer(rawroot_reader):
     #It is probably sufficient to check by half wise instead of channel wise
     #3 flags for each chip (some boards have 2 ROCs) - 0 for fail, 1 for grey area and 2 for pass
     
@@ -59,17 +63,18 @@ class ped_event_analyzer(rawroot_reader):
                 print("Chip is good")
                 chip_goodness.append(2)   
 
-            with open(fout,'w') as file:
+            with open(fout,'w') as file: #This is the first time the fresh file (analysis_summary_new.yaml etc) is to be opened
                 print(yaml.dump(nestedConf.to_dict(),file,sort_keys=False))
                 print("Written to yaml file")                   
                 
         return chip_goodness
 
-class pedestal_run_analyzer(analyzer):
+class overall_analyzer(analyzer):
     #This is only a one time thing for a particular size of board
     def pass_criteria_pedestal(self,device_type): #Here device_type is only size and not index (for eg TB3_D8 and not TB3_D8_11)
-        directory = "/home/reinecke/TBtesterv2_ROCv3_menu_Jia-Hao_copy/hexactrl-sw/hexactrl-script_Mar23TB/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
-        nestedConf = nested_dict()
+        directory = "/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
+        #nestedConf = nested_dict()
+        nestedConf = dict()
         #Next part copied from the functions below, probably looping over in case of 2 or more ROCs
         nchip = len( self.data.groupby('chip').nunique() )
         for chip in range(nchip):
@@ -82,6 +87,8 @@ class pedestal_run_analyzer(analyzer):
             cm = data[ data['channeltype']==100 ].copy()
             ch_array=[ch,calib,cm]#This seems like it is the whole series/dataframe
             ch_key_array = ['ch','calib','cm']
+
+
             for i in range(len(ch_array)):
                 #ch_median = pd.DataFrame([ch_array[i]['adc_median']])
                 
@@ -100,20 +107,41 @@ class pedestal_run_analyzer(analyzer):
                     nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['noise_lower'] = 0.2 #Should not be exactly 0 since that indicates a problem too
                     nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['noise_upper'] = round(float(ch_stddev.iloc[0,ch]*1.5),2)
                     '''
-                    
+
+                    with open(directory,'r+') as file:
+                        pedestal_values = yaml.safe_load(file)                    
+                        print(pedestal_values.keys())
+                        print("Old dictionary type",type(pedestal_values))
+                        #pedestal_values = nested_dict(pedestal_values)
+                        print("New dictionary type",type(pedestal_values))
+
+                    try:    
+                        pedestal_values['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['pedestal_lower'] = int(ch_median.iloc[0,ch] - 10)
+                        pedestal_values['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['pedestal_upper'] = int(ch_median.iloc[0,ch] + 10)+1
+                        pedestal_values['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['noise_lower'] = 0.2 #Should not be exactly 0 since that indicates a problem too
+                        pedestal_values['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['noise_upper'] = max(3,round(float(ch_stddev.iloc[0,ch]*1.5),2))
+
+                        print("Existing keys",pedestal_values)
+                        print('\n')
+
+                    except KeyError:
+                        print("Writing limits for the first time")
+                        nestedConf = analysis.set_key_dict(nestedConf,[ch,ch_key_array[i],'roc_s'+str(chip),'pedestal_run'],['pedestal_lower','pedestal_upper','noise_lower','noise_upper'],[int(ch_median.iloc[0,ch] - 10),int(ch_median.iloc[0,ch] + 10)+1,0.2,max(3,round(float(ch_stddev.iloc[0,ch]*1.5),2))])
+                        print("Initialized dict", nestedConf)
+
+                    print("Written pedestal limits to yaml file for channel", ch_key_array[i], ch)
+
+        pedestal_values = analysis.merge_nested(nestedConf,pedestal_values)
+        print("Merged dictionary",pedestal_values)
+        with open(directory,'w') as file:
+            #yaml.dump(pedestal_values,file,sort_keys=False)
+            yaml.dump(pedestal_values,file,sort_keys=True)
                     #New limits since old ones produced very many false bad channels
-                    nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['pedestal_lower'] = int(ch_median.iloc[0,ch] - 10)
-                    nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['pedestal_upper'] = int(ch_median.iloc[0,ch] + 10)+1
-                    nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['noise_lower'] = 0.2 #Should not be exactly 0 since that indicates a problem too
-                    nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch]['noise_upper'] = max(3,round(float(ch_stddev.iloc[0,ch]*1.5),2))
                     
-                    
-                with open(directory,'w') as file:
-                    print(yaml.dump(nestedConf.to_dict(),file,sort_keys=False))
-                    print("Written to yaml file")
+                #with open(directory,'w') as file:
 
     def channel_ped_check(self,device_type,fout=''):
-        directory = "/home/reinecke/TBtesterv2_ROCv3_menu_Jia-Hao_copy/hexactrl-sw/hexactrl-script_Mar23TB/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
+        directory = "/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
         nestedConf = nested_dict() 
         nchip = len( self.data.groupby('chip').nunique() )
         with open(directory,'r') as file:
@@ -341,14 +369,14 @@ class pedestal_run_raw_analyzer(analyzer):
             # plt.savefig("%s/pedestal_and_noise_vs_channel_chip%d.pdf"%(self.odir,chip),format='pdf',bbox_inches='tight') 
 
 def pass_refined_criteria_pedestal(device_type): #Here device_type is only size and not index (for eg TB3_D8 and not TB3_D8_11)
-    directory_out = "/home/reinecke/TBtesterv2_ROCv3_menu_Jia-Hao_copy/hexactrl-sw/hexactrl-script_Mar23TB/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
+    directory_out = "/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
     print("File to be written to",directory_out)
     data = {}
     run_ped_list = ["run_20240523_185030","run_20240523_125208","run_20240523_125538","run_20240522_174021"]
     #run_ped_list = ["run_20240522_174021"]
     run_index = 0
     for directory in run_ped_list:
-        ped_analyzer = pedestal_run_analyzer(odir=indir+ directory)
+        ped_analyzer = overall_analyzer(odir=indir+ directory)
         files = glob.glob(indir+directory+"/pedestal_run*.root")
         print(files)
         for f in files:
@@ -445,7 +473,8 @@ def pass_refined_criteria_pedestal(device_type): #Here device_type is only size 
                 nestedConf['pedestal_run']['roc_s'+str(chip)][ch_key_array[i]][ch_loop]['noise_upper'] = max(3,float(ch_array[i]['max_channel_noise'][ch_loop]))
 
     print(nestedConf)
-    with open(directory_out,'w') as file:
+    #with open(directory_out,'w') as file:
+    with open(directory_out,'r+') as file:
         print(yaml.dump(nestedConf.to_dict(),file,sort_keys=False))
         print("Written to yaml file")
 
@@ -455,8 +484,8 @@ if __name__ == "__main__":
     if len(sys.argv) == 3:
         indir = sys.argv[1]
         odir = sys.argv[2]
-        '''
-        ped_analyzer = pedestal_run_analyzer(odir=odir)
+        
+        ped_analyzer = overall_analyzer(odir=odir)
         files = glob.glob(indir+"/pedestal_run*.root")
         print(files)
         for f in files:
@@ -466,12 +495,8 @@ if __name__ == "__main__":
         ped_analyzer.pass_criteria_pedestal(device_type = "TB3_D8")    
         ped_analyzer.addSummary()
         ped_analyzer.writeSummary()
-        '''
-        #/home/reinecke/TBtesterv2_ROCv3_menu_Jia-Hao_copy/hexactrl-sw/hexactrl-script_Mar23TB/data/TB3/TB3_E8/
-        #ped_net_analyzer = pedestal_run_analyzer(odir=odir) #this directory is just a dummy, not really going to store summary or anything in here
-        pass_refined_criteria_pedestal(device_type = "TB3_E8")    
-        #ped_analyzer.addSummary()
-        #ped_analyzer.writeSummary()
+        
+        #pass_refined_criteria_pedestal(device_type = "TB3_E8")    
 
         #ped_analyzer = pedestal_run_raw_analyzer(odir=odir, treename = 'unpacker_data/hgcroc')
         #why is this even needed here anyway?
