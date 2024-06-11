@@ -13,6 +13,29 @@ import pandas as pd
 import numpy as np
 import copy
 
+def get_num_string(string,search_string):
+    string_start = string.find(search_string)
+
+    if string_start>=0 & string_start <len(string): #This means that the search string is somewhere inside the main string
+        
+        val = ''
+        flag = 0
+        #print("Find string",string_start)
+        if string[string_start+len(search_string)].isdigit():
+            flag = 1
+            search_begin = string_start+len(search_string)
+            if flag == 1:
+                for i in range(search_begin,len(string)):
+                    cur_char = string[i]
+                    #print()
+                    if cur_char.isdigit():
+                        val+=cur_char
+                    else:
+                        break
+        #print("Value obtained from string",val)                
+    return val                    
+
+
 #This assumes the config file is named in a somewhat specific format - either convgain"value" or gainconv"value" (no spaces and no underscore and the search is not case specific)
 def get_conveyor_gain(config_file):
     search_string = config_file.lower()
@@ -87,4 +110,69 @@ def merge_nested(a:nested_dict,b:nested_dict):
             #print(type(b))
             #print(b[key])
     return b           
+      
+ #Performs fit from the yaml file and determines the injection scan slope wrt the number of channels in each half     
+def get_slope_ch_nos(process,subprocess,indir,odir,channel_nos,conv_gain,chip):
+
+    with open(indir,'r') as file:
+        slope_limits = yaml.safe_load(file)
+        ch_nos_x = []
+        slope_y = []
+        
+        for key in slope_limits.keys():
+            print("Key name", key)
+            if key.find(process+'ernal '+ subprocess + ' injection') == 0: #i.e. the key starts with this substring
+            #Because there will be other tests as well
+                print("Injection criteria written to file")
+                
+                for key_chip in slope_limits[key].keys():
+                    print("Key name for chips keys",key_chip)
+                    if key_chip.find("roc_s"+str(chip))==0:
+                        
+                        for key_slope in slope_limits[key][key_chip].keys():
+
+                            ch_nos = int(get_num_string(key_slope,'ADC_vs_calib_slope_'))
+
+                            ch_nos_x = np.append(ch_nos_x,ch_nos)
+                            for key_gain in slope_limits[key][key_chip][key_slope].keys():
+                                conv_gain_file = float(get_num_string(key_gain,'conv_gain_'))
+                                #From the file, we only need one because that can be scaled accordingly for conveyor case (not dependent on conveyor gain for preamp case)
+                                
+                                if subprocess == 'preamp':
+                                    scale_factor = 1
+                                elif subprocess == 'conv':
+                                    scale_factor = conv_gain/conv_gain_file
+                                
+                                slope_val = float(slope_limits[key][key_chip][key_slope][key_gain])*scale_factor
+                                slope_y = np.append(slope_y,slope_val)
+                                
+                        print(ch_nos_x)
+                        print(slope_y)
+
+                        #popt, pcov = curve_fit(lambda x,a,b:a*x+b, ch_nos_x, slope_y, p0=[-0.1,2.1])
+                        popt, pcov = curve_fit(lambda x, A, t, y0: A * np.exp(x * t) + y0, ch_nos_x, slope_y, p0=[2.5,-1,0.5])
+                        fig, axes = plt.subplots(1,1,figsize=(16,9),sharey=False)
+                        axes.set_ylabel(f'Slope from injection scan')
+                        axes.set_xlabel(r'Number of channels injected in one half')
+                        axes.xaxis.grid(True)
+                        
+                        axes.scatter( ch_nos_x, slope_y, marker='o')
+                        #axes.plot(ch_nos_x,popt[0]*ch_nos_x+popt[1])
+                        print("fit parameter values", popt[0],popt[1],popt[2])
+                        
+                        ch_nos_plot = []
+                        for i in range(int(np.amin(ch_nos_x)),int(np.amax(ch_nos_x))+1):
+                            ch_nos_plot = np.append(ch_nos_plot,i)
+                        axes.plot(ch_nos_plot,popt[0] * np.exp(ch_nos_plot * popt[1]) + popt[2])
+                        
+                        plt.savefig(f'{odir}/Injection_scan_slope_exp_decay_fit.png', format='png', bbox_inches='tight')         
+                        #print("Saved image for linear region")
+                        plt.close()
+                        
+                        slope_ch = popt[0] * np.exp(channel_nos * popt[1]) + popt[2]
+                        #print("Slope of injection scan according to number of injected channels", slope_ch)
+                        
+    return slope_ch
+                        
+
       
