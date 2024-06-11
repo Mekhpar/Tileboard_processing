@@ -16,9 +16,19 @@ import yaml, os
 import copy
 from typing import List
 
+def get_sign(num):
+    sign = 0
+    if num>0:
+        sign = 1
+    elif num<0:
+        sign = -1
+    else:
+        pass
+    return sign
+
 #Right now this function is very specific but can/should be adapted to a more generic usage later  
 #And this will only use the class that reads from the rnsummary/summary tree (not eventwise) 
-def read_value(chip,channel,channeltype,odir,test_name = 'pedestal_run',value = 'adc_median'):
+def read_files(odir,test_name = 'pedestal_run'):
     use_file = eval(test_name + '_analysis')
     
     test_analyzer = use_file.overall_analyzer(odir=odir)
@@ -29,6 +39,9 @@ def read_value(chip,channel,channeltype,odir,test_name = 'pedestal_run',value = 
 
     test_analyzer.mergeData()  
     data = test_analyzer.data.copy()
+    return data
+    
+def read_val(chip,channel,channeltype,data,value = 'adc_median'):  
     val = data.loc[(data['chip']==chip) & (data['channeltype']==channeltype) & (data['channel']==channel), value].item()
 
     print("Read pedestal values successfully")
@@ -95,28 +108,10 @@ class overall_analyzer(analyzer):
     #This is for extracting the set parameter values from the directory/folder name (like calib pulse height for internal and LED bias or overvoltage for external case) since at present they are not stored in the root files
     def get_parameter_value(self,odir,parameter):
         search_string = odir.lower()
-        par_start = search_string.find(parameter)
-        val = ''
-        flag = 0
-        print("Size of parameter word",len(parameter))
-        if search_string[par_start+len(parameter)+1].isdigit(): #The extra one character is for the underscore that is supposed to be in the folder name
-            flag = 1
-            search_begin = par_start+len(parameter)+1
-            
-        else:
-            print("Wrong format for file name!")
+        val = analysis.get_num_string(search_string,parameter+'_')
+        #return (float(val))
+        return val
         
-        if flag == 1:
-            for i in range(search_begin,len(search_string)):
-                cur_char = search_string[i]
-                print()
-                if cur_char.isdigit():
-                    val+=cur_char
-                else:
-                    break
-            
-            return(float(val))
-    
     #Getting injected channels from the text file (TB2_info.txt) that also has temperature and bias information
     def get_injectedChannels(self,odir):
         line_number = 0
@@ -231,7 +226,7 @@ class overall_analyzer(analyzer):
 
             except KeyError:
                 print("Writing keys for the first time")
-                nestedConf = analysis.set_key_dict(nestedConf,['ADC_vs_calib_slope_'+str(inj_0)+'_channhgcalels','roc_s'+str(chip),process+'ernal '+ subprocess + ' injection'],['conv_gain_'+str(int(conv_gain))],[float(slope_avg)])
+                nestedConf = analysis.set_key_dict(nestedConf,['ADC_vs_calib_slope_'+str(inj_0)+'_channels','roc_s'+str(chip),process+'ernal '+ subprocess + ' injection'],['conv_gain_'+str(int(conv_gain))],[float(slope_avg)])
                 #nestedConf[process+'ernal '+ subprocess + ' injection']['roc_s'+str(chip)]['ADC_vs_calib_slope_'+str(inj_0)+'_channels']['conv_gain_'+str(int(conv_gain))] = float(slope_avg)
                 print("Initialized dict", nestedConf)
                     
@@ -251,6 +246,42 @@ class overall_analyzer(analyzer):
             #yaml.dump(injection_slope,file,sort_keys=False)
             yaml.dump(injection_slope,file,sort_keys=True)
 
+    def sub_zero_signal_time(self,sig_chan,calib,ped):
+        sig_chan['glitch_ct'] = 0
+        for phase in range(3,len(sig_chan)):
+            #print("Value of pulse at phase",phase)
+            #print(sig_chan['adc_median'].values[phase])
+            
+            #Also have to add some proper condition for sudden change/flipping direction of slope
+            cur_val = sig_chan['adc_median'].values[phase]
+            prev_val = sig_chan['adc_median'].values[phase-1]
+            prev_val_2 = sig_chan['adc_median'].values[phase-2]
+
+            cur_slope = (cur_val - prev_val)/(25/16.0)
+            prev_slope = (prev_val - prev_val_2)/(25/16.0)
+            #print("Values of current and previous slopes", cur_slope, prev_slope)
+            #print("Sign of current and previous slopes",get_sign(cur_slope),get_sign(prev_slope))
+            
+            if (cur_val < 0.9*ped) & (prev_val >= 0.9*ped) & (cur_slope < -20*calib/200.0): #the percentage of the pedestal is meant to take into account baseline variation at the end of the pulse
+            #Very stringent limit for second condition because do not want to have false negatives (still could be possible though)
+                sig_chan['glitch_ct'].values[phase] = 1
+
+            #print("Number of glitches starting",sig_chan['glitch_ct'].values[phase])
+        
+        for phase in range(3,len(sig_chan)):
+            
+            if sig_chan['glitch_ct'].values[phase]==1:
+                print("Phase with glitch",phase)
+                phase_iter = phase+1
+                while (sig_chan['adc_median'].values[phase_iter] < 0.9*ped):
+                    sig_chan['glitch_ct'].values[phase]+=1
+                    #print("Number of glitches",sig_chan['glitch_ct'].values[phase])
+                    phase_iter+=1
+                    if phase_iter >= len(sig_chan):
+                        break
+
+                print("Number of continuous glitches in total",sig_chan['glitch_ct'].values[phase])  
+        return sig_chan  
         
     def channel_sampling_scan_internal_check(self,device_type,injectedChannels,file_num,odir,process,subprocess,fout=''):
         directory = "/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
@@ -263,78 +294,100 @@ class overall_analyzer(analyzer):
         conv_gain = analysis.get_conveyor_gain(config_file)
         print(conv_gain)
         cmap = cm.get_cmap('viridis') 
-        calib = self.get_parameter_value(odir,'calib')
+        calib = float(self.get_parameter_value(odir,'calib'))
         print(calib)
         
         #Optional plotting (both halves in one plot) with linear fit instead of calculating chi_squared
-        
+        ped_data = read_files('/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/data/TB3/TB3_D8_11/pedestal_run_TB3_D8_11_7','pedestal_run')
         nchip = inj_data['chip'].unique()
         
-        with open(directory,'r') as file:
-            slope_limits = yaml.safe_load(file)
-            print("Slope limits file contents")
-            print(slope_limits)
+        for chip in nchip:
+            #Seems a little redundant to copypaste this all over again from making the yaml file
+            print("ROC number",chip)
+            inj_chip = inj_data[inj_data['chip']==chip].copy()
+            nhalf = inj_chip['half'].unique()
+            ch_bad_wave = 0
+            for half in nhalf:
+                inj_half = inj_chip[inj_chip['half']==half].copy()
+                inj_sorted = inj_half.sort_values(by=["channel","time"], ignore_index=True)
+                
+                inj = int(len(inj_sorted.copy())/file_num)
+                print("Number of injected channels in half",half," are ", inj)
+                injected_channels = inj_sorted['channel'].unique()
+                print(injected_channels)
+                
+                slope = analysis.get_slope_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip)
+                print("Slope from injection scan for half", half," is",slope)
+                print()
+                
+                for i in injected_channels:
+                    print("Channel number",i)
+                    inj_pulse = inj_sorted[(inj_sorted['channel']==i)].copy().set_index("entries")
+                    #print(inj_pulse)
+                    max_pulse = max(inj_pulse['adc_median'])
+                    print("Maximum value of ADC counts in pulse", max_pulse)
+                    inj_pulse = inj_pulse.astype({'adc_median':float})
+                    #This will also help when there are two phases that could have the maximum value, just take the first one
+                    BX_amp = inj_pulse.loc[inj_pulse['adc_median'] == max_pulse,'BX'].values[0]
+                    phase_amp = inj_pulse.loc[inj_pulse['adc_median'] == max_pulse,'Phase'].values[0]
+                    
+                    print("BX and Phase at which max amplitude occurs", BX_amp, phase_amp)
+                    print("Net Phase at which max amplitude occurs", phase_amp+16*BX_amp) #In case of choosing the file for sps (albeit that is external injection and not internal), this will give the actual index of the file
+                    
+                    inj_ped = inj_sorted[(inj_sorted['channel']==i) & (inj_sorted['entries']<4)].copy().set_index("entries")
+                    #print(inj_ped)
+                    pedestal_baseline = inj_ped.mean(axis=0)['adc_median']
+                    print("Pedestal from pulse baseline", pedestal_baseline)
+                    
+                    #Pedestal value from one of the pedestal runs (has to have the same triminv, dacb, vrefinv etc settings from the config file)
+                    #Channeltype will be 0 by default since only those can be injected into (gain settings can be changed)
+                    pedestal_ped_run = read_val(chip,i,0,ped_data,'adc_median')
+                    print("Average (mean/median) pedestal from previous pedestal runs", pedestal_ped_run)
+                    
+                    #if abs(pedestal_ped_run - pedestal_baseline)<10:
+                    #    print("Pedestal values consistent")
+                    
+                    inj_pulse_glitch = self.sub_zero_signal_time(inj_pulse,calib,pedestal_baseline)
+                    phase_glitch = inj_pulse_glitch[inj_pulse_glitch['glitch_ct']>2]
+                    print(phase_glitch)
+                    if len(phase_glitch) >=1:
+                        print("Bad waveform")
+                        ch_bad_wave+=1
 
-            for key in slope_limits.keys():
-                print("Key name", key)
-                if key == process+'ernal '+ subprocess + ' injection': #Because there will be other tests as well
-                    for chip in nchip:
-                        #Seems a little redundant to copypaste this all over again from making the yaml file
-                        print("ROC number",chip)
-                        inj_chip = inj_data[inj_data['chip']==chip].copy()
-                        nhalf = inj_chip['half'].unique()
-                        
-                        for half in nhalf:
-                            inj_half = inj_chip[inj_chip['half']==half].copy()
-                            inj_sorted = inj_half.sort_values(by=["channel","time"], ignore_index=True)
+                    pulse_amp = max_pulse - pedestal_baseline
+                    print("Pulse amplitude", pulse_amp)
+                    if abs(pulse_amp - slope*calib) <= 0.1*calib: #Important condition but not the deciding one
+                    #if abs(pulse_amp - slope*calib) == 0:
+                        pass
+                    else:
+                        print("Potentially bad pulse")
                             
-                            inj = int(len(inj_sorted.copy())/file_num)
-                            print("Number of injected channels in half",half," are ", inj)
-                            injected_channels = inj_sorted['channel'].unique()
-                            print(injected_channels)
-                            
-                            for i in injected_channels:
-                                inj_pulse = inj_sorted[(inj_sorted['channel']==i)].copy().set_index("entries")
-                                print(inj_pulse)
-                                max_pulse = max(inj_pulse['adc_median'])
-                                print("Maximum value of ADC counts in pulse", max_pulse)
-                                
-                                #This will also help when there are two phases that could have the maximum value, just take the first one
-                                BX_amp = inj_pulse.loc[inj_pulse['adc_median'] == max_pulse,'BX'].values[0]
-                                phase_amp = inj_pulse.loc[inj_pulse['adc_median'] == max_pulse,'Phase'].values[0]
-                                
-                                print("BX and Phase at which max amplitude occurs", BX_amp, phase_amp)
-                                print("Net Phase at which max amplitude occurs", phase_amp+16*BX_amp) #In case of choosing the file for sps (albeit that is external injection and not internal), this will give the actual index of the file
-                                
-                                inj_ped = inj_sorted[(inj_sorted['channel']==i) & (inj_sorted['entries']<4)].copy().set_index("entries")
-                                print(inj_ped)
-                                pedestal_baseline = inj_ped.mean(axis=0)['adc_median']
-                                print("Pedestal from pulse baseline", pedestal_baseline)
-                                
-                                #Pedestal value from one of the pedestal runs (has to have the same triminv, dacb, vrefinv etc settings from the config file)
-                                #Channeltype will be 0 by default since only those can be injected into (gain settings can be changed)
-                                pedestal_ped_run = read_value(chip,i,0,'/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/data/TB3/TB3_D8_11/pedestal_run_TB3_D8_11_7','pedestal_run','adc_median')
-                                print("Average (mean/median) pedestal from previous pedestal runs", pedestal_ped_run)
-                                
-                                if abs(pedestal_ped_run - pedestal_baseline)<10:
-                                    print("Pedestal values consistent")
-                                    pulse_amp = max_pulse - pedestal_baseline
-                                    print("Pulse amplitude", pulse_amp)
-                                
+                    print()        
+
+            print("Number of channels with bad waveforms in both halves for chip", chip, " are",ch_bad_wave)
+
     def makePlots(self, injectedChannels):
         nchip = len( self.data.groupby('chip').nunique() )        
         cmap = cm.get_cmap('Dark2')
 
         inj_data = self.data[ (self.data['channeltype']==0) & (self.data['channel'].isin(injectedChannels)) ].copy()
         inj_data['time'] = inj_data.apply( lambda x: 25/16.0*(x.Phase+16*x.BX),axis=1 )
+        
+        #print to csv file for grouping with the data from other files
+        data_pd_csv = pd.DataFrame()
         for chip in self.data.groupby('chip')['chip'].mean():
             chanColor=0
             fig, ax = plt.subplots(1,1,figsize=(16,9))
             for injectedChannel in injectedChannels:
                 sel_data = inj_data[ (inj_data['chip']==chip) & (inj_data['channel']==injectedChannel) ]
                 sel_data = sel_data.sort_values(by=['time'],ignore_index=True)
+                
+                print("Original dataframe",sel_data['adc_median'])
                 plt.plot( sel_data['time'], sel_data['adc_median'], color=cmap(chanColor), label=r'Channel %d'%(injectedChannel),marker='o')
                 chanColor=chanColor+1
+                
+                data_pd_csv['time'] = sel_data['time']
+                data_pd_csv['chip_'+str(chip)+'_ch_'+str(injectedChannel)+'_adc_median'] = sel_data['adc_median']
 
             plt.title('Sampling scan, chip%d'%(chip))
             plt.xlabel(r'Time [ns]')
@@ -390,7 +443,9 @@ class overall_analyzer(analyzer):
             ax.xaxis.set_minor_locator(AutoMinorLocator(16))
             plt.savefig("%s/tot_sampling_scan_chip%d.png"%(self.odir,chip),format='png',bbox_inches='tight') 
             plt.close()
-
+        
+        print("Final dataframe",data_pd_csv)
+        data_pd_csv.to_csv(os.path.join(self.odir,"sampling_scan_adc.csv"))
 
     def addSummary(self,injectedChannels):
             
