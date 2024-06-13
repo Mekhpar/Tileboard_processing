@@ -136,7 +136,39 @@ class overall_analyzer(analyzer):
         print("Full list of injected Channels (non zero gain)", injectedChannels)
         return injectedChannels
 
-    #At the moment, only for internal injection
+    #Getting number of injected channels for any particular half because that is required for deciding what pulse shape (mainly height and two widths) is required
+    def chip_half(self,device_type,injectedChannels,file_num,odir,process,subprocess):
+        inj_data = self.data[ (self.data['channeltype']==0) & (self.data['channel'].isin(injectedChannels)) ].copy() #First condition only for the real 72 channels and second is obvious
+        inj_data['time'] = inj_data.apply( lambda x: 25/16.0*(x.Phase+16*x.BX),axis=1 )
+        inj_data['entries'] = inj_data.apply( lambda x: (int(x.Phase+16*x.BX)),axis=1 )
+        
+        nchip = inj_data['chip'].unique()
+        self.chip_dict = dict()
+        for chip in nchip:
+            inj_chip = inj_data[inj_data['chip']==chip].copy()
+            nhalf = inj_chip['half'].unique()
+            self.chip_dict.setdefault(chip,dict())
+
+            for half in nhalf:
+                inj_half = inj_chip[inj_chip['half']==half].copy()
+                inj_sorted = inj_half.sort_values(by=["channel","time"], ignore_index=True)
+                self.chip_dict[chip][half] = inj_sorted
+        
+    def get_pulse(self,chip,half,channel):
+        inj_half = self.chip_dict[chip][half]
+
+        inj_pulse = inj_half[(inj_half['channel']==channel)].copy().set_index("entries")
+        inj_pulse = inj_pulse.astype({'adc_median':float})
+        max_pulse = max(inj_pulse['adc_median'])
+
+        inj_ped = inj_half[(inj_half['channel']==channel) & (inj_half['entries']<4)].copy().set_index("entries")
+        print(inj_pulse)
+        print(inj_ped)
+        pedestal_baseline = inj_ped.mean(axis=0)['adc_median']
+
+        return inj_pulse, max_pulse, pedestal_baseline
+
+    #At the moment, only for internal injection, and only for the amplitude comparison from the slopes of the injection scans (variation vs number of injected channels)
     def pass_criteria_sampling_scan_internal(self,device_type,injectedChannels,file_num,odir,process,subprocess): #Here device_type is only size and not index (for eg TB3_D8 and not TB3_D8_11)
         directory = "/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
         nestedConf = dict()
@@ -246,6 +278,106 @@ class overall_analyzer(analyzer):
             #yaml.dump(injection_slope,file,sort_keys=False)
             yaml.dump(injection_slope,file,sort_keys=True)
 
+
+    #Only for writing the widths from the sampling scan for different injected channels (and fitting in a different script)
+    #A lot of repetition between this and the channel_sampling_scan_internal_check function
+    def pulse_width_pass(self,device_type,injectedChannels,file_num,odir,height_percent,process,subprocess):
+        directory = "/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
+        nestedConf = dict()
+        #Getting gain from config file name
+        conv_gain = analysis.get_conveyor_gain(config_file)
+        print(conv_gain)
+        cmap = cm.get_cmap('viridis') 
+        calib = float(self.get_parameter_value(odir,'calib'))
+        print(calib)
+        
+        #Optional plotting (both halves in one plot) with linear fit instead of calculating chi_squared
+        ped_data = read_files('/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/data/TB3/TB3_D8_11/pedestal_run_TB3_D8_11_7','pedestal_run')
+        self.chip_half("TB3_D8",injectedChannels,len(files),odir,process='int',subprocess='preamp')
+        for chip in self.chip_dict.keys():
+            print("ROC number",chip)
+            for half in self.chip_dict[chip].keys():
+                print("half number",half)
+
+                inj_half = self.chip_dict[chip][half]
+                injectedChannels_half = inj_half['channel'].unique()  
+                inj = len(injectedChannels_half)
+                print("Number of injected channels", inj)
+                print(injectedChannels_half)
+                #Average because these widths are supposed to be the same for the channels in each half
+                
+                rise_avg = 0
+                fall_avg = 0
+                for i in injectedChannels_half:
+                    print("Channel number",i)
+
+                    (inj_pulse,max_pulse,pedestal_baseline) = self.get_pulse(chip,half,i)
+                    print("Pedestal from pulse baseline", pedestal_baseline)
+                    #This will also help when there are two phases that could have the maximum value, just take the first one
+                    BX_amp = inj_pulse.loc[inj_pulse['adc_median'] == max_pulse,'BX'].values[0]
+                    phase_amp = inj_pulse.loc[inj_pulse['adc_median'] == max_pulse,'Phase'].values[0]
+                    
+                    print("BX and Phase at which max amplitude occurs", BX_amp, phase_amp)
+                    print("Net Phase at which max amplitude occurs", phase_amp+16*BX_amp) #In case of choosing the file for sps (albeit that is external injection and not internal), this will give the actual index of the file
+
+                    #Pedestal value from one of the pedestal runs (has to have the same triminv, dacb, vrefinv etc settings from the config file)
+                    #Channeltype will be 0 by default since only those can be injected into (gain settings can be changed)
+                    pedestal_ped_run = read_val(chip,i,0,ped_data,'adc_median')
+                    print("Average (mean/median) pedestal from previous pedestal runs", pedestal_ped_run)
+
+                    pulse_amp = max_pulse - pedestal_baseline
+                    print("Pulse amplitude", pulse_amp)
+                    min_phase = inj_pulse.loc[inj_pulse['adc_median']>=height_percent*pulse_amp+pedestal_baseline,'adc_median'].index[0] #This is the current lower phase for calculating the 'rising' width
+                    max_phase = inj_pulse.loc[inj_pulse['adc_median']>=height_percent*pulse_amp+pedestal_baseline,'adc_median'].index[-1] #This is the current lower phase for calculating the 'falling' width
+                    
+                    print(inj_pulse.loc[inj_pulse.index==min_phase,'adc_median'])
+                    print(inj_pulse.loc[inj_pulse.index==max_phase,'adc_median'])
+                    
+                    #Finding net phase index using first order (linear) interpolation
+                    min_phase_slope = (inj_pulse.loc[inj_pulse.index==min_phase,'adc_median'].values[0] - inj_pulse.loc[inj_pulse.index==min_phase-1,'adc_median'].values[0])/1.0 #1 is the difference between two consecutive phase indices
+                    print(min_phase_slope)
+                    min_phase_final = min_phase - (inj_pulse.loc[inj_pulse.index==min_phase,'adc_median'].values[0] - (height_percent*pulse_amp+pedestal_baseline))/min_phase_slope
+
+
+                    max_phase_slope = (inj_pulse.loc[inj_pulse.index==max_phase+1,'adc_median'].values[0] - inj_pulse.loc[inj_pulse.index==max_phase,'adc_median'].values[0])/1.0 #1 is the difference between two consecutive phase indices
+                    print(max_phase_slope)
+                    max_phase_final = max_phase + ((height_percent*pulse_amp+pedestal_baseline) - inj_pulse.loc[inj_pulse.index==max_phase,'adc_median'].values[0])/max_phase_slope
+                    
+                    print("Phase for rising width",min_phase_final)
+                    print("Phase for falling width",max_phase_final)
+                    print("Rising width", phase_amp+16*BX_amp - min_phase_final)
+                    print("Falling width", max_phase_final - (phase_amp+16*BX_amp))
+                    
+                    rise_avg += (phase_amp+16*BX_amp - min_phase_final)
+                    fall_avg += (max_phase_final - (phase_amp+16*BX_amp))
+                    
+                print("Average rising and falling widths for channels in half", half, " are",rise_avg/inj," and", fall_avg/inj)
+                
+                with open(directory,'r+') as file:
+                #with open(directory,'w') as file:
+                    pulse_shape = yaml.safe_load(file)                    
+                    print(pulse_shape.keys())
+                    print(type(pulse_shape))
+                    
+                try:    
+                    pulse_shape[process+'ernal '+ subprocess + ' injection']['roc_s'+str(chip)]['Rise_width'][str(inj)+'_channels'] = round(float(rise_avg/inj),2)
+                    pulse_shape[process+'ernal '+ subprocess + ' injection']['roc_s'+str(chip)]['Fall_width'][str(inj)+'_channels'] = round(float(fall_avg/inj),2)
+                    print("Writing to existing keys")
+                    #print(pulse_shape)
+
+                except KeyError:
+                    print("Writing keys for the first time")
+                    nestedConf = analysis.set_key_dict(nestedConf,['Rise_width','roc_s'+str(chip),process+'ernal '+ subprocess + ' injection'],[str(inj)+'_channels'],[round(float(rise_avg/inj),2)])
+                    nestedConf = analysis.set_key_dict(nestedConf,['Fall_width','roc_s'+str(chip),process+'ernal '+ subprocess + ' injection'],[str(inj)+'_channels'],[round(float(fall_avg/inj),2)])
+                    #nestedConf[process+'ernal '+ subprocess + ' injection']['roc_s'+str(chip)]['ADC_vs_calib_slope_'+str(inj_0)+'_channels']['conv_gain_'+str(int(conv_gain))] = float(slope_avg)
+                    #print("Initialized dict", nestedConf)
+        
+                pulse_shape = analysis.merge_nested(nestedConf,pulse_shape)
+                print("Merged dictionary",pulse_shape)
+                with open(directory,'w') as file:
+                    yaml.dump(pulse_shape,file,sort_keys=False)
+                
+                                    
     def sub_zero_signal_time(self,sig_chan,calib,ped):
         sig_chan['glitch_ct'] = 0
         for phase in range(3,len(sig_chan)):
@@ -262,8 +394,10 @@ class overall_analyzer(analyzer):
             #print("Values of current and previous slopes", cur_slope, prev_slope)
             #print("Sign of current and previous slopes",get_sign(cur_slope),get_sign(prev_slope))
             
-            if (cur_val < 0.9*ped) & (prev_val >= 0.9*ped) & (cur_slope < -20*calib/200.0): #the percentage of the pedestal is meant to take into account baseline variation at the end of the pulse
-            #Very stringent limit for second condition because do not want to have false negatives (still could be possible though)
+            if (cur_val < 0.9*ped) & (prev_val >= 0.9*ped) & (cur_slope < -20*calib/200.0): 
+            #the percentage of the pedestal is meant to take into account baseline variation at the end of the pulse
+            
+            #Very stringent limit for second condition because do not want to have false negatives (still could be possible though) - the -20 and 200 come from looking at the slopes for the falling edge of the pulse for a pulse height (calib) of 200, and the calib is the actual pulse height for the run
                 sig_chan['glitch_ct'].values[phase] = 1
 
             #print("Number of glitches starting",sig_chan['glitch_ct'].values[phase])
@@ -282,6 +416,7 @@ class overall_analyzer(analyzer):
 
                 print("Number of continuous glitches in total",sig_chan['glitch_ct'].values[phase])  
         return sig_chan  
+        
         
     def channel_sampling_scan_internal_check(self,device_type,injectedChannels,file_num,odir,process,subprocess,fout=''):
         directory = "/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
@@ -567,8 +702,9 @@ if __name__ == "__main__":
 
         injectedChannels = sampling_analyzer.get_injectedChannels(odir) 
         sampling_analyzer.mergeData()
-            
-        sampling_analyzer.channel_sampling_scan_internal_check("TB3_D8",injectedChannels,len(files),odir,process='int',subprocess='preamp',fout = odir + "analysis_summary_new.yaml")
+        sampling_analyzer.pulse_width_pass("TB3_D8",injectedChannels,len(files),odir,height_percent=0.1,process='int',subprocess='preamp')
+        #sampling_analyzer.chip_half("TB3_D8",injectedChannels,len(files),odir,process='int',subprocess='preamp')
+        #sampling_analyzer.channel_sampling_scan_internal_check("TB3_D8",injectedChannels,len(files),odir,process='int',subprocess='preamp',fout = odir + "analysis_summary_new.yaml")
         
         
         #sampling_analyzer.makePlots(injectedChannels)
