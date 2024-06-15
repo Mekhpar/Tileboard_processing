@@ -1,15 +1,30 @@
-#At the moment these are all from sampling scans at pulse height 200 (and 400)
 internal preamp injection:
   roc_s0:
-    ADC_vs_calib_slope_2_channels:
-      conv_gain_12: 1.9
-    ADC_vs_calib_slope_5_channels:
-      conv_gain_12: 1.55
-    ADC_vs_calib_slope_8_channels:
-      conv_gain_12: 1.3
-    ADC_vs_calib_slope_12_channels:
-      conv_gain_12: 1.16
       
+    num_ch_2:
+      Rise_width: 8.74
+      Fall_width: 24.46
+      ADC_vs_calib_slope:
+        conv_gain_4: 1.9      
+
+    num_ch_5:
+      Rise_width: 10.09
+      Fall_width: 30.73
+      ADC_vs_calib_slope:
+        conv_gain_4: 1.55
+              
+    num_ch_8:
+      Rise_width: 10.68
+      Fall_width: 35.72
+      ADC_vs_calib_slope:
+        conv_gain_4: 1.3
+
+    num_ch_12:
+      Rise_width: 11.46
+      Fall_width: 43.31
+      ADC_vs_calib_slope:
+        conv_gain_4: 1.16
+
 pedestal_run:
   roc_s0:
     calib:
