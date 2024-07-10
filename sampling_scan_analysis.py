@@ -6,10 +6,10 @@ from nested_dict import nested_dict
 import pandas as pd
 import numpy as np
 
-import analysis.level0.miscellaneous_analysis_functions as analysis
+import analysis.level0.miscellaneous_analysis_functions as analysis_misc
 import analysis.level0.pedestal_run_analysis
 
-#import miscellaneous_analysis_functions as analysis
+#import miscellaneous_analysis_functions as analysis_misc
 #import pedestal_run_analysis
 
 import yaml, os
@@ -29,8 +29,8 @@ def get_sign(num):
 #Right now this function is very specific but can/should be adapted to a more generic usage later  
 #And this will only use the class that reads from the rnsummary/summary tree (not eventwise) 
 def read_files(odir,test_name = 'pedestal_run'):
-    use_file = eval(test_name + '_analysis')
-    
+    #use_file = eval(test_name + '_analysis')
+    use_file = eval('analysis.level0.'+test_name + '_analysis')
     test_analyzer = use_file.overall_analyzer(odir=odir)
     files = glob.glob(odir+"/"+test_name+"*.root")
     print(files)
@@ -108,7 +108,7 @@ class overall_analyzer(analyzer):
     #This is for extracting the set parameter values from the directory/folder name (like calib pulse height for internal and LED bias or overvoltage for external case) since at present they are not stored in the root files
     def get_parameter_value(self,odir,parameter):
         search_string = odir.lower()
-        val = analysis.get_num_string(search_string,parameter+'_')
+        val = analysis_misc.get_num_string(search_string,parameter+'_')
         #return (float(val))
         return val
         
@@ -136,9 +136,55 @@ class overall_analyzer(analyzer):
         print("Full list of injected Channels (non zero gain)", injectedChannels)
         return injectedChannels
 
+    def get_start_BX_phase(self,odir):
+        line_number = 0
+        line_ch = 0
+        bx_start = 0
+        phase_start = 0
+        tb2_info = open(odir+"/TB2_info.txt", "r")
+        lines_tb2 = tb2_info.readlines()
+        print(len(lines_tb2))
+        for lines in lines_tb2:
+            line_number+=1
+            for i in range(len(lines.split())): 
+                if lines.split()[i] == "sample_scan:": #The latter word is the run number and 0 ensures that that is where the whole run is started from
+                    if lines.split()[i+1]=="0":
+                        line_ch = line_number
+                        break
+            #break           
+        print("Line containing starting BX and phase settings", line_ch)
+        line = lines_tb2[line_ch-1]
+        print(line)
+        for j in range(len(line.split())):
+            #print(line[j])
+            if line.split()[j] == "bx:":
+                bx_start = int(line.split()[j+1])
+            if line.split()[j] == "phase:":
+                phase_start = int(line.split()[j+1])
+        return bx_start,phase_start
+        
+    def get_start_trigger(self,odir):
+        line_number = 0
+        line_ch = 0
+        bx_start = 0
+        phase_start = 0
+        tb2_info = open(odir+"/TB2_info.txt", "r")
+        lines_tb2 = tb2_info.readlines()
+        print(len(lines_tb2))
+        for lines in lines_tb2:
+            line_number+=1
+            for i in range(len(lines.split())): 
+                if lines.split()[i] == "trigger":
+                    if lines.split()[i+1] == "pulse:":
+                        line_ch = line_number
+                        break
+            #break           
+        print("Line containing starting trigger pulse BX", line_ch)
+        calib_bx = int(lines_tb2[line_ch].split()[0])
+        return calib_bx
 
     #Getting number of injected channels for any particular half because that is required for deciding what pulse shape (mainly height and two widths) is required
-    def chip_half(self,device_type,injectedChannels,file_num,odir,process,subprocess):
+    def chip_half(self,device_type,injectedChannels,odir):
         inj_data = self.data[ (self.data['channeltype']==0) & (self.data['channel'].isin(injectedChannels)) ].copy() #First condition only for the real 72 channels and second is obvious
         inj_data['time'] = inj_data.apply( lambda x: 25/16.0*(x.Phase+16*x.BX),axis=1 )
         inj_data['entries'] = inj_data.apply( lambda x: (int(x.Phase+16*x.BX)),axis=1 )
@@ -214,7 +260,7 @@ class overall_analyzer(analyzer):
         inj_data = self.data[ (self.data['channeltype']==0) & (self.data['channel'].isin(injectedChannels)) ].copy() #First condition only for the real 72 channels and second is obvious
 
         #Getting gain from config file name
-        conv_gain = analysis.get_conveyor_gain(config_file)
+        conv_gain = analysis_misc.get_conveyor_gain(config_file)
         print(conv_gain)
 
         cmap = cm.get_cmap('viridis') 
@@ -295,7 +341,7 @@ class overall_analyzer(analyzer):
 
             except KeyError:
                 print("Writing keys for the first time")
-                nestedConf = analysis.set_key_dict(nestedConf,['ADC_vs_calib_slope_'+str(inj_0)+'_channels','roc_s'+str(chip),process+'ernal '+ subprocess + ' injection'],['conv_gain_'+str(int(conv_gain))],[float(slope_avg)])
+                nestedConf = analysis_misc.set_key_dict(nestedConf,['ADC_vs_calib_slope_'+str(inj_0)+'_channels','roc_s'+str(chip),process+'ernal '+ subprocess + ' injection'],['conv_gain_'+str(int(conv_gain))],[float(slope_avg)])
                 #nestedConf[process+'ernal '+ subprocess + ' injection']['roc_s'+str(chip)]['ADC_vs_calib_slope_'+str(inj_0)+'_channels']['conv_gain_'+str(int(conv_gain))] = float(slope_avg)
                 print("Initialized dict", nestedConf)
                     
@@ -309,7 +355,7 @@ class overall_analyzer(analyzer):
             print("Saved image for linear region")
             plt.close()
 
-        injection_slope = analysis.merge_nested(nestedConf,injection_slope)
+        injection_slope = analysis_misc.merge_nested(nestedConf,injection_slope)
         print("Merged dictionary",injection_slope)
         with open(directory,'w') as file:
             #yaml.dump(injection_slope,file,sort_keys=False)
@@ -322,14 +368,14 @@ class overall_analyzer(analyzer):
         directory = "/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
         nestedConf = dict()
         #Getting gain from config file name
-        conv_gain = analysis.get_conveyor_gain(config_file)
+        conv_gain = analysis_misc.get_conveyor_gain(config_file)
         print(conv_gain)
         calib = float(self.get_parameter_value(odir,'calib'))
         print(calib)
         
         #Optional plotting (both halves in one plot) with linear fit instead of calculating chi_squared
-        ped_data = read_files('/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/data/TB3/TB3_D8_11/pedestal_run_TB3_D8_11_7','pedestal_run')
-        self.chip_half("TB3_D8",injectedChannels,len(files),odir,process='int',subprocess='preamp')
+        ped_data = read_files('/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/data/TB3_D8_10/pedestal_run_2','pedestal_run')
+        self.chip_half("TB3_D8",injectedChannels,odir)
         for chip in self.chip_dict.keys():
             print("ROC number",chip)
             for half in self.chip_dict[chip].keys():
@@ -378,8 +424,8 @@ class overall_analyzer(analyzer):
                     print(pulse_shape.keys())
                     print(type(pulse_shape))
 
-                pulse_shape = analysis.set_key_dict(pulse_shape,['num_ch_'+str(inj),'roc_s'+str(chip),process+'ernal '+ subprocess + ' injection'],['Rise_width'],[round(float(rise_avg/inj),2)])
-                pulse_shape = analysis.set_key_dict(pulse_shape,['num_ch_'+str(inj),'roc_s'+str(chip),process+'ernal '+ subprocess + ' injection'],['Fall_width'],[round(float(fall_avg/inj),2)])
+                pulse_shape = analysis_misc.set_key_dict(pulse_shape,['num_ch_'+str(inj),'roc_s'+str(chip),process+'ernal '+ subprocess + ' injection'],['Rise_width'],[round(float(rise_avg/inj),2)])
+                pulse_shape = analysis_misc.set_key_dict(pulse_shape,['num_ch_'+str(inj),'roc_s'+str(chip),process+'ernal '+ subprocess + ' injection'],['Fall_width'],[round(float(fall_avg/inj),2)])
 
                 with open(directory,'w') as file:
                     yaml.dump(pulse_shape,file,sort_keys=False)
@@ -425,20 +471,22 @@ class overall_analyzer(analyzer):
         return sig_chan  
         
         
-    def channel_sampling_scan_internal_check(self,device_type,injectedChannels,file_num,odir,process,subprocess,height_percent,fout=''):
+    def channel_sampling_scan_internal_check(self,device_type,injectedChannels,file_num,odir,process,subprocess,height_percent,config_file,fout=''):
         directory = "/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
         nestedConf = nested_dict()
         
         #Getting gain from config file name
-        conv_gain = analysis.get_conveyor_gain(config_file)
+        conv_gain = analysis_misc.get_conveyor_gain(config_file)
         print(conv_gain)
         cmap = cm.get_cmap('viridis') 
         calib = float(self.get_parameter_value(odir,'calib'))
         print(calib)
+
+        no_phase_chan = [] #This is the list of channels, which are not necessarily bad but do not satisfy at least one of the criteria right away and it is best if these are excluded from the list of channels used to calculate the max adc phase       
         
         #Optional plotting (both halves in one plot) with linear fit instead of calculating chi_squared
-        ped_data = read_files('/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/data/TB3/TB3_D8_11/pedestal_run_TB3_D8_11_7','pedestal_run')
-        self.chip_half("TB3_D8",injectedChannels,len(files),odir,process='int',subprocess='preamp')
+        ped_data = read_files('/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/data/TB3_D8_10/pedestal_run_2','pedestal_run')
+        self.chip_half("TB3_D8",injectedChannels,odir)
         for chip in self.chip_dict.keys():
             print("ROC number",chip)
             ch_bad_wave = 0
@@ -453,13 +501,13 @@ class overall_analyzer(analyzer):
                 print(injectedChannels_half)
                 #Average because these widths are supposed to be the same for the channels in each half
         
-                slope = analysis.get_slope_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip)
+                slope = analysis_misc.get_slope_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip)
                 print("Slope from injection scan for half", half," is",slope)
                 print()
                 
-                #rise_wd = analysis.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip,"Rise")
+                #rise_wd = analysis_misc.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip,"Rise")
                 #print("Rising width from sampling scan for half", half,"is",rise_wd)
-                inv_prod_mean, ratio_rf_y = analysis.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip)
+                inv_prod_mean, ratio_rf_y = analysis_misc.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip)
                 
                 full_wd = inv_prod_mean/slope
                 rise_wd_y = []
@@ -470,12 +518,11 @@ class overall_analyzer(analyzer):
 
                     fall_wd_y = np.append(fall_wd_y,fall_wd)
                     rise_wd_y = np.append(rise_wd_y,rise_wd)
-                #analysis.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip,"Rise")
-                #analysis.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip,"Fall")
+                #analysis_misc.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip,"Rise")
+                #analysis_misc.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip,"Fall")
                 print(rise_wd_y,fall_wd_y)
                 print()
-
-                
+                         
                 for i in injectedChannels_half:
                     print("Channel number",i)
                     (inj_pulse,max_pulse,pedestal_baseline, BX_amp, phase_amp) = self.get_pulse(chip,half,i)
@@ -495,24 +542,34 @@ class overall_analyzer(analyzer):
                     
                     #if abs(pedestal_ped_run - pedestal_baseline)<10:
                     #    print("Pedestal values consistent")
+                    amp_flag = 0
+                    rise_flag = 0
+                    fall_flag = 0
+                    sat_flag = 0
+                    glch_flag = 0
                     
                     inj_pulse_glitch = self.sub_zero_signal_time(inj_pulse,calib,pedestal_baseline)
                     phase_glitch = inj_pulse_glitch[inj_pulse_glitch['glitch_ct']>2]
                     print(phase_glitch)
                     if len(phase_glitch) >=1:
                         print("Bad waveform")
+                        glch_flag = 1
                         ch_bad_wave+=1
 
                     pulse_amp = max_pulse - pedestal_baseline
                     print("Pulse amplitude", pulse_amp)
+                    
+                    
                     if (abs(max_pulse - 1023) < 0.5) & (len(inj_pulse.loc[inj_pulse['adc_median'] == max_pulse,'Phase'])>2):
                         print("Saturated pulse - do not attempt to calculate pulse width and pick best phase for injection scan!!")
+                        sat_flag = 1
                     else:
                         if abs(pulse_amp - slope*calib) <= 0.1*calib: #Important condition but not the deciding one
                         #if abs(pulse_amp - slope*calib) == 0:
                             pass
                         else:
                             print("Potentially bad amplitude")
+                            amp_flag = 1
                                 
                         rise_wd = self.get_width(chip,half,i,height_percent,1)
                         fall_wd = self.get_width(chip,half,i,height_percent,-1)
@@ -522,15 +579,22 @@ class overall_analyzer(analyzer):
                             pass
                         else:
                             print("Potentially bad rise width")        
+                            rise_flag = 1
                         
                         if (fall_wd>=np.min(fall_wd_y)-1) & (fall_wd<=np.max(fall_wd_y)+1):
                             pass
                         else:
-                            print("Potentially bad fall width")    
-
+                            print("Potentially bad fall width")   
+                            fall_flag = 1 
+                    
+                    print("List of flags:","sat:",sat_flag,"amp:",amp_flag,"rise_wd:",rise_flag, "fall_wd:",fall_flag,"glitch:",glch_flag)
+                    if ((sat_flag == 1) | (amp_flag == 1) | (rise_flag == 1) | (fall_flag == 1) | (glch_flag == 1)):
+                        no_phase_chan.append(i)
+                    
                     print()        
 
             print("Number of channels with bad waveforms in both halves for chip", chip, " are",ch_bad_wave)
+            return no_phase_chan
 
     def makePlots(self, injectedChannels):
         nchip = len( self.data.groupby('chip').nunique() )        
@@ -643,7 +707,7 @@ class overall_analyzer(analyzer):
                 #print ("Phase", phase)
                 max_adc_phase =  data_max_adc['Phase']
                 print ("Max Phase", max_adc_phase.to_list()[0])
-                print ("Max Phase lenght", len(max_adc_phase))
+                print ("Max Phase length", len(max_adc_phase))
                 #print ("sel_data['adc_median']", sel_data['adc_median'].max())
 
                 ## rejection criteria based on phase at max adc to be implemented               
@@ -659,51 +723,63 @@ class overall_analyzer(analyzer):
     def fit(self,data):
         pass
 
-    def determine_bestPhase(self,injectedChannels):
-
-        rockeys = []
-        with open("%s/initial_full_config.yaml"%(self.odir)) as fin:
-            initconfig = yaml.safe_load(fin)
-            for key in initconfig.keys():
-                if key.find('roc')==0:
-                    rockeys.append(key)
-        rockeys.sort()
-
-        inj_data = self.data[ (self.data['channeltype']==0) & (self.data['channel'].isin(injectedChannels)) ].copy()
-        inj_data['time'] = inj_data.apply( lambda x: 25/16.0*(x.Phase+16*x.BX),axis=1 )
-
-        nchip = len(inj_data.groupby('chip').nunique() )        
-        yaml_dict = {}
-
-        for chip in range(nchip):
-            chanColor=0
-            best_phase = []
-            for injectedChannel in injectedChannels:
+    def determine_bestPhase(self,injectedChannels,odir,no_phase_chan):
+        self.chip_half("TB3_D8",injectedChannels,odir)
+        bx_begin, phase_begin = self.get_start_BX_phase(odir)
+        print("Starting BX and phase", bx_begin, phase_begin)
+        
+        calib_bx = self.get_start_trigger(odir)
+        print("Calibreq value",calib_bx)
+        BX_phase_info=dict()
+        for chip in self.chip_dict.keys():
+            print("ROC number",chip)
+            for half in self.chip_dict[chip].keys():
+                print("half number",half)
                 
-                sel_data = inj_data[ (inj_data['chip']==chip) & (inj_data['channel']==injectedChannel) ]
-                sel_data = sel_data.sort_values(by=['time'],ignore_index=True)
-                prof = sel_data.groupby("Phase")["adc_mean"].mean()
-                #print(sel_data.iloc[sel_data[['adc_mean']].idxmax()]['Phase'].values[0])
-                best_phase.append(sel_data.iloc[sel_data[['adc_mean']].idxmax()]['Phase'].values[0])
-            ret = int(sum(best_phase)/len(best_phase)) #Looks like the average over the injected channels
-            #print(ret)
+                inj_half = self.chip_dict[chip][half]
+                injectedChannels_half = inj_half['channel'].unique()  
+                inj = len(injectedChannels_half)
+                print("Number of injected channels", inj)
+                print(injectedChannels_half)
+                ret = 0
+                used_inj_chan = []
+                
+                for i in injectedChannels_half:
+                    if i in no_phase_chan:
+                        pass
+                    else:
+                        used_inj_chan.append(i)
+                
+                print("Injected channels used for max phase calculation", used_inj_chan)         
+                #Average because these widths are supposed to be the same for the channels in each half
+                best_phase_half = []
+                if len(used_inj_chan)>=1:
+                    for i in used_inj_chan:
 
-            if chip<len(rockeys):
-                chip_key_name = rockeys[chip]
-                yaml_dict[chip_key_name] = {
-                    'sc' : {
-                        'Top' : { 
-                            'all': {
-                                'phase_strobe': 15-ret
-                                }
-                            }
-                        }
-                    }
-            else :
-                print("WARNING : best phase will not be saved for ROC %d"%(chip))
-        with open(self.odir+'/best_phase.yaml','w') as fout:
-            yaml.dump(yaml_dict,fout)
+                        (inj_pulse,max_pulse,pedestal_baseline, BX_amp, phase_amp) = self.get_pulse(chip,half,i)
+                        best_phase_half.append(phase_amp+16*BX_amp) #Do NOT take the average of BX and phase separately, it could cause problems if the phases are slightly different and in different BXs
 
+                    ret = int(sum(best_phase_half)/len(best_phase_half))
+                    print("BX and phase combo", ret)
+                    BX_half = int(ret/16)
+                    phase_half = int(ret - BX_half*16)
+                    print("Best max BX and phase for half",half,"BX:",BX_half+bx_begin,"phase:",phase_half+phase_begin)
+
+                    BX_phase_info=dict()
+                    try:
+                        with open(self.odir+'/best_phase.yaml','r+') as fin:
+                            BX_phase_info = yaml.safe_load(fin)    
+                                                    
+                    except FileNotFoundError:                        
+                        pass
+                    half_key = str(half)
+                    BX_phase_info = analysis_misc.set_key_dict(BX_phase_info,[half_key,'Top','sc','roc_s'+str(chip)],['BX'],[BX_half+bx_begin-calib_bx])
+                    BX_phase_info = analysis_misc.set_key_dict(BX_phase_info,[half_key,'Top','sc','roc_s'+str(chip)],['phase'],[phase_half+phase_begin])
+
+                    print(BX_phase_info)    
+                    with open(self.odir+'/best_phase.yaml','w') as fout:
+                        yaml.dump(BX_phase_info,fout,sort_keys=False)
+        
 
 if __name__ == "__main__":
     
@@ -734,9 +810,10 @@ if __name__ == "__main__":
         injectedChannels = sampling_analyzer.get_injectedChannels(odir) 
         sampling_analyzer.mergeData()
         #sampling_analyzer.pulse_width_pass("TB3_D8",injectedChannels,len(files),odir,height_percent=0.1,process='int',subprocess='preamp')
-        #sampling_analyzer.chip_half("TB3_D8",injectedChannels,len(files),odir,process='int',subprocess='preamp')
-        sampling_analyzer.channel_sampling_scan_internal_check("TB3_D8",injectedChannels,len(files),odir,process='int',subprocess='preamp',height_percent=0.1,fout = odir + "analysis_summary_new.yaml")
-        
+        #sampling_analyzer.chip_half("TB3_D8",injectedChannels,odir)
+        no_phase_chan = sampling_analyzer.channel_sampling_scan_internal_check("TB3_D8",injectedChannels,len(files),odir,process='int',subprocess='preamp',height_percent=0.1,config_file = config_file,fout = odir + "analysis_summary_new.yaml")
+        print("List of channels excluded from phase calculation", no_phase_chan)
+        sampling_analyzer.determine_bestPhase(injectedChannels,odir, no_phase_chan)
         
         #sampling_analyzer.makePlots(injectedChannels)
         #sampling_analyzer.addSummary(injectedChannels)
