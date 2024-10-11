@@ -3,6 +3,11 @@ from scipy.optimize import curve_fit
 import glob,itertools
 import seaborn as sns 
 import pandas as pd
+import copy
+
+#import miscellaneous_analysis_functions as analysis_misc
+
+import analysis.level0.miscellaneous_analysis_functions as analysis_misc
 
 class vref2D_scan_analyzer(analyzer):
 
@@ -63,21 +68,48 @@ class vref2D_scan_analyzer(analyzer):
     def fit(self, df,y_arr,x_arr,min_prct,max_prct):
     
         max_df = df[y_arr].max()
+        max_df_index = df.index[df[y_arr] == max_df].max()
         min_df = df[ df[y_arr]>0 ][y_arr].min()
+        min_df_index = df.index[df[y_arr] == min_df].min()
         
         print("Limits of scan", max_df,min_df)
+        df_less = df[y_arr] < max_prct*max_df
+        print(df.index)
+        print("Printed indices")
+        print(df.index > max_df_index)
+        print((df[y_arr] < max_prct*max_df) & (df.index > max_df_index))
         imax = df.index[df[y_arr] < max_prct*max_df].min()  # get index of rightmost maximum
+        print("Max df index",max_df_index)
+        print("Imax indices")
         print(imax)
+
+        imax_new = df.index[(df[y_arr] < max_prct*max_df) & (df.index > max_df_index)].min()
+        print(imax_new)
+
+        print("Min df index",min_df_index)
+        print("imin indices")
         imin = df.index[df[y_arr] > min_prct*min_df].max()
         print(imin)
+        imin_new = df.index[(df[y_arr] > min_prct*min_df) & (df.index < min_df_index)].max()
+        print(imin_new)
         
         df_lin = pd.DataFrame()
         #This will take care of both positive (vrefnoinv) and negative (vrefinv) slopes
+        #'''
+        if imin_new > imax_new:
+            df_lin = df[(df.index <= imin_new) & (df.index >= imax_new)]
+            
+        elif imin_new < imax_new:
+            df_lin = df[(df.index >= imin_new) & (df.index <= imax_new)]
+        #'''    
+
+        '''
         if imin > imax:
             df_lin = df[(df.index <= imin) & (df.index >= imax)]
             
         elif imin < imax:
             df_lin = df[(df.index >= imin) & (df.index <= imax)]
+        '''
         
         xs = df_lin[x_arr]
         
@@ -94,10 +126,24 @@ class vref2D_scan_analyzer(analyzer):
             return xs,-1,-1
 
     
-    def determine_Vref(self):
+    def determine_Vref(self,configFile,odir):
         sel_data = self.data[['chip','channel','channeltype','adc_mean','adc_stdd','Inv_vref','Noinv_vref','half']].copy()
         sel_data = sel_data.sort_values(by=["Noinv_vref","Inv_vref"], ignore_index=True)
         nchip = sel_data['chip'].unique()
+        
+        with open(configFile) as f:
+            cfg = yaml.safe_load(f)
+        rockeys = []
+        
+        nestedConf = nested_dict() #This is for writing to a different file, and not just the final fit values, but the slopes as well (for comparison)
+
+        with open("%s/initial_config.yaml"%(self.odir)) as fin:
+            initconfig = yaml.safe_load(fin)
+            for key in initconfig.keys():
+                if key.find('roc')==0:
+                    rockeys.append(key)
+        rockeys.sort()
+        
         for chip in nchip:
             data_chip = sel_data[sel_data['chip']==chip]
             nhalf = data_chip['half'].unique()
@@ -123,6 +169,9 @@ class vref2D_scan_analyzer(analyzer):
 
             fig, axes = plt.subplots(1,2,figsize=(20,15),sharey=False)
             fig1, axes1 = plt.subplots(1,2,figsize=(20,15),sharey=False)
+
+            if chip<len(rockeys):
+                chip_key_name = rockeys[int(chip)] #converted to int as we only have 1 chip for now
 
             for half in nhalf:
                 df_inv_fit = pd.DataFrame()
@@ -192,45 +241,60 @@ class vref2D_scan_analyzer(analyzer):
                     fig1.savefig("%s/pedestal_vs_vrefnoinv_chip%d.png"%(self.odir,chip),format='png',bbox_inches='tight') 
                     plt.close(fig1)
 
-                vnoinv_final = 850 #This is just because that was the original value in the config file
-                vinv_final = int((target - alpha_inv[1])/alpha_inv[0])
+
+                vnoinv_final = noinv_fix #This is just because that was the original value in the config file
+                vinv_final = -1
+                vinv_fit = (target - alpha_inv[1])/alpha_inv[0]
+                print("Value not rounded",vinv_fit)
+                if vinv_fit % 1 < 0.5:
+                    vinv_final = int(vinv_fit)
+                elif vinv_fit % 1 >= 0.5:
+                    vinv_final = int(vinv_fit) + 1
 
                 if vinv_final < xs_inv.min():
-                    vnoinv_final = int((vinv_final - xs_inv.min())*alpha_inv[0]/alpha_noinv[0]) + 850
+                    vnoinv_final = int((vinv_final - xs_inv.min())*alpha_inv[0]/alpha_noinv[0]) + noinv_fix
                     vinv_final = xs_inv.min()
 
                 elif vinv_final > xs_inv.max():
-                    vnoinv_final = int((vinv_final - xs_inv.max())*alpha_inv[0]/alpha_noinv[0]) + 850
+                    vnoinv_final = int((vinv_final - xs_inv.max())*alpha_inv[0]/alpha_noinv[0]) + noinv_fix
                     vinv_final = xs_inv.max()
 
                 if (vnoinv_final < xs_noinv.min()) | (vnoinv_final > xs_noinv.max()):
-                    vnoinv_final = 850
+                    vnoinv_final = noinv_fix
                 
                 print()    
                 print("Half value", half)
                 print("final value of vinv",vinv_final)
                 print("final value of vnoinv",vnoinv_final)
-                            
-if __name__ == "__main__":
-    '''
-    if len(sys.argv) == 2:
-        indir = sys.argv[1]
-        odir = sys.argv[1]
-    elif len(sys.argv) == 3:
-        indir = sys.argv[1]
-        odir = sys.argv[2]
-    else:
-        print("wrong arg list")
-    '''
-    
-    odir = "/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/data/TB3/vref2D_scan/run_20240703_201619/"
-    vref2D_analyzer = vref2D_scan_analyzer(odir=odir)
-    files = glob.glob(odir+"*.root")
-    print(files)
-    
-    for f in files:
-        vref2D_analyzer.add(f)
- 
-    vref2D_analyzer.mergeData()
-    #vref2D_analyzer.makePlots()
-    vref2D_analyzer.determine_Vref()
+
+                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Inv_vref'],[int(vinv_final)])
+                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Inv_slope'],[round(float(alpha_inv[0]),3)])
+                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Inv_y_int'],[round(float(alpha_inv[1]),3)])
+
+                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Noinv_vref'],[int(vnoinv_final)])
+                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Noinv_slope'],[round(float(alpha_noinv[0]),3)])
+                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Noinv_y_int'],[round(float(alpha_noinv[1]),3)])
+
+
+                cfg[chip_key_name]['sc']['ReferenceVoltage'][half]['Inv_vref'] = int(vinv_final)
+                cfg[chip_key_name]['sc']['ReferenceVoltage'][half]['Noinv_vref'] = int(vnoinv_final)
+            
+                #nestedConf[chip_key_name]['sc']['ReferenceVoltage'][half]['Inv_vref'] = int(vinv_final)
+                #nestedConf[chip_key_name]['sc']['ReferenceVoltage'][half]['Noinv_vref'] = int(vnoinv_final)
+
+                
+       
+        configFile = configFile.replace('.yaml','')  
+        #'''
+        print(nestedConf.to_dict())        
+        with open(odir+"Vref2D_fit.yaml", "w") as o:
+            print(yaml.dump(nestedConf.to_dict(),o))
+        
+        print("Saved new config file as:"+"Vref2D_fit.yaml")    
+        #'''    
+        with open(configFile+"_vref2D_full_aligned.yaml", "w") as o:
+            yaml.dump(cfg, o)
+        
+        print("Saved new config file as:"+configFile+"_vref2D_full_aligned.yaml")    
+     
+
