@@ -4,6 +4,7 @@ import glob,itertools
 import seaborn as sns 
 import pandas as pd
 import copy
+import matplotlib
 
 #import miscellaneous_analysis_functions as analysis_misc
 
@@ -12,7 +13,8 @@ import analysis.level0.miscellaneous_analysis_functions as analysis_misc
 class vref2D_scan_analyzer(analyzer):
 
     def makePlots(self):
-        cmap = cm.get_cmap('YlOrRd')
+        #cmap = cm.get_cmap('YlOrRd')
+        cmap = matplotlib.colormaps['YlOrRd']
         sel_data = self.data[['chip','channel','channeltype','adc_mean','adc_stdd','Inv_vref','Noinv_vref','half']].copy()
         df = sel_data.query('channeltype==0').groupby(['chip', 'half', 'Noinv_vref', 'Inv_vref'])[['adc_mean','adc_stdd']].mean()
         df.rename(columns={'adc_mean': 'pedestal', 'adc_stdd': 'noise'}, inplace=True)
@@ -150,7 +152,7 @@ class vref2D_scan_analyzer(analyzer):
             print("Chip number",chip)
             print("Halves",nhalf) 
             
-            df = data_chip.query('channeltype==0').groupby(['chip', 'half', 'Noinv_vref', 'Inv_vref'])[['adc_mean','adc_stdd']].mean()
+            df = data_chip.query('channeltype==0').groupby(['chip', 'half', 'Noinv_vref', 'Inv_vref'])[['adc_mean','adc_stdd']].median()
             df.rename(columns={'adc_mean': 'pedestal', 'adc_stdd': 'noise'}, inplace=True)
             print(df)
             #print(df.index[1][3])
@@ -167,7 +169,7 @@ class vref2D_scan_analyzer(analyzer):
             print(noinv_fix,inv_fix)
             target = 200
 
-            fig, axes = plt.subplots(1,2,figsize=(20,15),sharey=False)
+            fig, axes = plt.subplots(1,2,figsize=(30,15),sharey=False)
             fig1, axes1 = plt.subplots(1,2,figsize=(20,15),sharey=False)
 
             if chip<len(rockeys):
@@ -213,6 +215,22 @@ class vref2D_scan_analyzer(analyzer):
                 fig.suptitle("pedestal_1D_vs_vrefinv_chip_"+str(chip),y=0.93)
                 h, l = ax.get_legend_handles_labels()
                 ax.legend(h, l)
+
+
+                target_array = []
+                target_x = []
+
+                max_val = int(df_inv_fit['inv_vals'].max())
+                min_val = int(df_inv_fit['inv_vals'].min())
+
+                ax.set_xticks(range(min_val,max_val,50))
+                ax.set_xticklabels(range(min_val,max_val,50),fontsize=8)
+
+                for k in range(max_val - min_val):
+                    target_x.append(k+min_val)
+                    target_array.append(target)
+
+                ax.plot(target_x, target_array,'k--')
 
                 if half == 1:
                     fig.savefig("%s/pedestal_vs_vrefinv_chip%d.png"%(self.odir,chip),format='png',bbox_inches='tight') 
@@ -267,14 +285,8 @@ class vref2D_scan_analyzer(analyzer):
                 print("final value of vinv",vinv_final)
                 print("final value of vnoinv",vnoinv_final)
 
-                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Inv_vref'],[int(vinv_final)])
-                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Inv_slope'],[round(float(alpha_inv[0]),3)])
-                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Inv_y_int'],[round(float(alpha_inv[1]),3)])
-
-                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Noinv_vref'],[int(vnoinv_final)])
-                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Noinv_slope'],[round(float(alpha_noinv[0]),3)])
-                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Noinv_y_int'],[round(float(alpha_noinv[1]),3)])
-
+                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Inv_vref','Inv_slope','Inv_y_int','Noinv_vref','Noinv_slope','Noinv_y_int','target'],
+                [int(vinv_final),round(float(alpha_inv[0]),3),round(float(alpha_inv[1]),3),int(vnoinv_final),round(float(alpha_noinv[0]),3),round(float(alpha_noinv[1]),3),target])
 
                 cfg[chip_key_name]['sc']['ReferenceVoltage'][half]['Inv_vref'] = int(vinv_final)
                 cfg[chip_key_name]['sc']['ReferenceVoltage'][half]['Noinv_vref'] = int(vnoinv_final)
@@ -288,7 +300,7 @@ class vref2D_scan_analyzer(analyzer):
         #'''
         print(nestedConf.to_dict())        
         with open(odir+"Vref2D_fit.yaml", "w") as o:
-            print(yaml.dump(nestedConf.to_dict(),o))
+            print(yaml.dump(nestedConf.to_dict(),o,sort_keys=False))
         
         print("Saved new config file as:"+"Vref2D_fit.yaml")    
         #'''    
