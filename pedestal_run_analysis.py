@@ -8,6 +8,7 @@ import yaml, os
 from typing import List
 
 import analysis.level0.miscellaneous_analysis_functions as analysis
+#import miscellaneous_analysis_functions as analysis
 from nested_dict import nested_dict
 import pandas as pd
 import numpy as np
@@ -192,6 +193,202 @@ class overall_analyzer(analyzer):
         with open(fout,'r+') as file:
             bad_channels = yaml.safe_load(file)
             print(yaml.dump(nestedConf.to_dict(),file,sort_keys=False))
+
+    #Actually might as well split the alignment into two steps - since there is no point in checking the spread for vref alignment, the median/mean/something else will have to do
+    def ped_alignment_check(self,odir,target_dir):
+        nchip = len(self.data.groupby('chip').nunique())
+        print("Chips",nchip)
+
+        #Caution Directory hard coded!!!!!!!!!!
+
+        #Read both bad channel files from the pedestal scan and the pedestal run (actually later this will probably be in the same file, although still under different sections)
+        f_ped_scan = target_dir
+        f_ped_run = "/home/hgcal/Desktop/kria/HGCROC3a/hexactrl-sw/hexactrl-script-anurag-cleanup/data/pedestal_tests/pedestal_run_3/analysis_summary.yaml"
+
+        with open(f_ped_scan,'r') as ped_scan_file:
+            bad_ped_scan = yaml.safe_load(ped_scan_file)
+
+        with open(f_ped_run,'r') as ped_run_file:
+            bad_ped_run = yaml.safe_load(ped_run_file)
+
+        align_status = nested_dict()
+
+        for chip in range(nchip):
+            data = self.data[ self.data['chip']==chip ].copy()
+            data_ch = data[data['channeltype']==0].copy()
+
+            bad_scan_ch = bad_ped_scan['bad_channels']['chip'+str(chip)]['ch']
+            bad_run_ch = bad_ped_run['bad_channels']['chip'+str(chip)]['ch']
+
+            bad_ch_net = np.union1d(bad_scan_ch, bad_run_ch).tolist()
+            print("Collective set of bad channels",bad_ch_net)
+            
+            target_0 = bad_ped_scan['target']['chip_'+str(chip)]['sc']['half_0']
+            target_1 = bad_ped_scan['target']['chip_'+str(chip)]['sc']['half_1']
+
+            #Only for debugging
+            #target_0 = 200
+            #target_1 = 200
+
+            trim_sat_chan = np.union1d(bad_ped_scan['sat_triminv_channels']['chip_'+str(chip)]['sc']['trim_more_63']['ch'],
+            bad_ped_scan['sat_triminv_channels']['chip_'+str(chip)]['sc']['trim_less_0']['ch'])
+
+            #Not sure whether to do another noise check here
+            data_good = data_ch[~data_ch['channel'].isin(bad_ch_net)]
+            #print(data_good)
+
+            #Check full spread or 1 sigma? - going for full spread at the moment
+
+            #Adding a column for deviation from the target for each channel - mainly useful for debugging
+            data_good.loc[data_good['channel'] < 36,'ped_tar_dev'] = data_good['adc_mean'].apply(lambda x: abs(x-target_0))
+            data_good.loc[data_good['channel'] >= 36,'ped_tar_dev'] = data_good['adc_mean'].apply(lambda x: abs(x-target_1))
+            #data_good['ped_tar_dev'] = abs(data_g_0['adc_mean'] - target_0)
+
+            print(data_good)
+            print(data_good['adc_mean'])
+            print(data_good['ped_tar_dev'])
+
+            print(data_good[data_good['channel'] < 36]['ped_tar_dev'].median())
+            print(data_good[data_good['channel'] >= 36]['ped_tar_dev'].median())
+            #For the bad channels the plan is to take values of the mean (since the target set was also the median of the 'means') and put a (right now strict) limit of 10 ADC ticks on either side
+            bad_align = data_good[data_good['ped_tar_dev']>=6]
+            not_aligned_channels = bad_align['channel'].values
+            print(type(not_aligned_channels))
+            #not_aligned_channels = np.append(not_aligned_channels,35) #Just for debugging
+
+            print(not_aligned_channels)
+            yellow_flag_channels = np.intersect1d(not_aligned_channels, trim_sat_chan).tolist()
+            other_channels = np.setdiff1d(not_aligned_channels, trim_sat_chan).tolist()
+            print("Wrongly aligned channels that also had triminv saturated values",yellow_flag_channels)
+            print("Wrongly aligned channels without triminv saturated values",other_channels)
+            #print(data_g_1)
+
+            med_dist_0 = data_good[data_good['channel'] < 36]['ped_tar_dev'].median()
+            med_dist_1 = data_good[data_good['channel'] >= 36]['ped_tar_dev'].median()
+
+            #Comparing the median of the distances to the distance of the median from the target for the dacb !=0 file
+            print("Median of distances",med_dist_0,med_dist_1)
+            print("Distance of median",abs(data_good[data_good['channel'] < 36]['adc_mean'].median()-target_0),
+            abs(data_good[data_good['channel'] >= 36]['adc_mean'].median()-target_1))
+            
+            align_status = analysis.set_key_dict(align_status,['sc','chip_'+str(chip),'med_dist_target'],['half_0'],[round(float(med_dist_0),3)])
+            align_status = analysis.set_key_dict(align_status,['sc','chip_'+str(chip),'med_dist_target'],['half_1'],[round(float(med_dist_1),3)])
+
+            if (len(yellow_flag_channels) >= 10) | (med_dist_0 > 2): #Whole half is off by 2 ADC counts
+                print("Wrong alignment or bad half 0!")
+                align_status = analysis.set_key_dict(align_status,['chip_'+str(chip),'status'],['sc'],['failed'])
+                align_status = analysis.set_key_dict(align_status,['sc','chip_'+str(chip),'bad_channels'],['ch'],[bad_ch_net])
+
+
+            if (len(yellow_flag_channels) >= 10) | (med_dist_1 > 2): #Whole half is off by 2 ADC counts
+                print("Wrong alignment or bad half 1!")
+                align_status = analysis.set_key_dict(align_status,['chip_'+str(chip),'status'],['sc'],['failed'])
+                align_status = analysis.set_key_dict(align_status,['sc','chip_'+str(chip),'bad_channels'],['ch'],[bad_ch_net])
+
+            if (len(yellow_flag_channels) < 10) & (med_dist_0 <= 2) & (med_dist_1 <= 2): #Successful alignment
+                align_status = analysis.set_key_dict(align_status,['chip_'+str(chip),'status'],['sc'],['success'])
+                align_status = analysis.set_key_dict(align_status,['sat_trim','sc','chip_'+str(chip),'yellow_flag_channels'],['ch'],[yellow_flag_channels])
+                align_status = analysis.set_key_dict(align_status,['others','sc','chip_'+str(chip),'yellow_flag_channels'],['ch'],[other_channels])
+
+                align_status = analysis.set_key_dict(align_status,['sc','chip_'+str(chip),'bad_channels'],['ch'],[bad_ch_net])
+
+                mask = []
+                mask.append(data_good['channel'] < 36)
+                mask.append(data_good['channel'] >= 36)
+                #print(mask)
+                #Also quantifying the spread of the 'aligned' channels (i.e. not the outliers) and their median distance from the target (already calculated)
+                for half in [0,1]:
+
+                    g_hf = data_good[(data_good['ped_tar_dev']<6) & (mask[half])]
+
+                    max = g_hf['adc_mean'].max()
+                    min = g_hf['adc_mean'].min()
+
+                    spread = max - min 
+                    sigma = np.std(g_hf['adc_mean'])
+
+                    print("Sigma of the spread for half",half, "is", sigma)
+
+                    print("Max and min for half",half, "is", max,min)
+                    print("Spreads for half",half, "for the well aligned channels",spread)
+
+                    chan_max = g_hf[g_hf['adc_mean'] == max]['channel'].values[0]
+                    chan_min = g_hf[g_hf['adc_mean'] == min]['channel'].values[0]
+
+                    print("Channels for max and min for half 0:",chan_max,chan_min)
+
+                    align_status = analysis.set_key_dict(align_status,['half_'+str(half),'sc','chip_'+str(chip),'Ped_limits'],
+                    ['Max','Min','Channel_Max','Channel_Min','Spread_total','Spread_sigma'],
+                    [round(float(max),3),round(float(min),3),int(chan_max),int(chan_min),round(float(spread),3),round(float(sigma),3)])
+
+        with open(odir+'alignment_status.yaml','w') as align_status_file:
+            print(yaml.dump(align_status.to_dict(),align_status_file,sort_keys=False))
+        
+        print("Saved alignment status file as:"+"alignment_status.yaml")    
+
+
+    def ped_full_alignment_check(self,odir):
+        nchip = len(self.data.groupby('chip').nunique())
+        print("Chips",nchip)
+
+        #no need to check bad channels here
+        align_status = nested_dict()
+        
+        #Still have to read out bad channels from the half alignment check though, that is what the f_half_align directory is for
+
+        #Caution Directory hard coded!!!!!!!!!!
+        f_vref_scan = "/home/hgcal/Desktop/kria/HGCROC3a/hexactrl-sw/hexactrl-script-anurag-cleanup/data/None/vref2D_scan/run_20241009_150226/Vref2D_fit.yaml"
+        f_half_align = "/home/hgcal/Desktop/kria/HGCROC3a/hexactrl-sw/hexactrl-script-anurag-cleanup/data/new_fit/pedestal_run_6/alignment_status.yaml"
+
+
+        with open(f_vref_scan,'r') as vref_scan_file:
+            vref_scan = yaml.safe_load(vref_scan_file)
+
+        with open(f_half_align,'r') as half_align_file:
+            half_align = yaml.safe_load(half_align_file)
+
+        for chip in range(nchip):
+            data = self.data[ self.data['chip']==chip ].copy()
+            data_ch = data[data['channeltype']==0].copy()
+
+            yellow_flag_chan = np.union1d(half_align['yellow_flag_channels']['chip_'+str(chip)]['sc']['sat_trim']['ch'],
+            half_align['yellow_flag_channels']['chip_'+str(chip)]['sc']['others']['ch'])
+
+            bad_exc_chan = np.union1d(half_align['bad_channels']['chip_'+str(chip)]['sc']['ch'],yellow_flag_chan)
+
+            print("Bad channels obtained from half alignment",bad_exc_chan)
+
+            data_good = data_ch[~data_ch['channel'].isin(bad_exc_chan)]
+            print(data_good['channel'].values)
+
+            mask = []
+            mask.append(data_good['channel'] < 36)
+            mask.append(data_good['channel'] >= 36)
+
+            for half in [0,1]:
+  
+                med = data_good[mask[half]]['adc_mean'].median()
+                target = vref_scan['roc_s'+str(chip)]['sc']['ReferenceVoltage'][half]['target']
+
+                med_dist = abs(med - target)
+
+                print("Median values and distance compared to target for half",half,"are:",med,med_dist)
+
+                align_status = analysis.set_key_dict(align_status,['sc','chip_'+str(chip),'med_dist_target'],['half_'+str(half)],[round(float(med_dist),3)])
+
+                #This is basically the same as the half alignment wrt the new target
+                #Obviously the median distance to the target is different from the distance of the median to the target
+                if med_dist > 2: 
+                    print("Wrong alignment with half",half,"!")
+                    align_status = analysis.set_key_dict(align_status,['sc','chip_'+str(chip),'status'],['half_'+str(half)],['failed'])
+
+                elif med_dist <= 2:
+                    align_status = analysis.set_key_dict(align_status,['sc','chip_'+str(chip),'status'],['half_'+str(half)],['success'])
+
+        with open(odir+'full_alignment_status.yaml','w') as align_status_file:
+            print(yaml.dump(align_status.to_dict(),align_status_file,sort_keys=False))
+        
+        print("Saved alignment status file as:"+"full_alignment_status.yaml")    
 
     def makePlots(self):
 
