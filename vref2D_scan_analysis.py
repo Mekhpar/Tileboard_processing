@@ -1,5 +1,8 @@
 from level0.analyzer import *
 from scipy.optimize import curve_fit
+from lmfit import Parameters,minimize, fit_report
+from scipy.stats import chisquare
+
 import glob,itertools
 import seaborn as sns 
 import pandas as pd
@@ -67,8 +70,77 @@ class vref2D_scan_analyzer(analyzer):
 
     #Copied from the 1D (vrefinv) analysis script
 
-    def fit(self, df,y_arr,x_arr,min_prct,max_prct):
+    def lin_fit(params,x,y):
+        m = params['m']
+        c = params['c']
+        y_diff = m*x + c -y
+        return y_diff
+
+    def fit(self, df,y_arr,x_arr,min_prct,max_prct,chip,half,zero_slope_limit):
     
+        #Plotting LH and RH derivative of all the points (not just linear region)
+        y_cur = df[y_arr]
+        x_cur = df[x_arr]
+
+        y_lh = df.shift(1,axis=0)[y_arr]
+        x_lh = df.shift(1,axis=0)[x_arr]
+
+        y_rh = df.shift(-1,axis=0)[y_arr]
+        x_rh = df.shift(-1,axis=0)[x_arr]
+        '''
+        print("Data frames for left and right handed derivatives")
+        print(y_cur)
+        print(x_cur)
+        print(y_lh)
+        print(x_lh)
+        print(y_rh)
+        print(x_rh)
+        '''
+        df['lh_slope'] = (y_cur-y_lh)/(x_cur-x_lh)
+        df['rh_slope'] = (y_cur-y_rh)/(x_cur-x_rh)
+
+        print("Lh and Rh derivatives")
+        print(df['lh_slope'])
+        print(df['rh_slope'])
+
+        fig, axes = plt.subplots(1,2,figsize=(30,15),sharey=False)  
+        ax = axes[0]
+        ax.xaxis.grid(True)
+        ax.yaxis.grid(True)
+        print("x axis for plotting lh derivative")
+        
+        ax.scatter(df[~df['lh_slope'].isna()][x_arr], df[~df['lh_slope'].isna()]['lh_slope']) 
+
+        ax = axes[1]
+        ax.xaxis.grid(True)
+        ax.yaxis.grid(True)
+
+        ax.scatter(df[~df['rh_slope'].isna()][x_arr], df[~df['rh_slope'].isna()]['rh_slope'])
+
+        fig.savefig("%s/derivative_vs_%s_chip_%d_half_%d.png"%(self.odir,x_arr,chip,half),format='png',bbox_inches='tight') 
+
+        #This removes all slopes close to 0, which means that the fairly flat region generally found at the beginning and end of vrefinv scan will not be included in the fit
+        df_lin_mod = df[abs(df['rh_slope'])>=zero_slope_limit]
+
+        med_lin_slope = df_lin_mod['rh_slope'].median()
+        #Probably only taking one type of derivative here (the right handed one)
+        print("Median for the non flat region in rh",med_lin_slope) #Obviously median of lh slopes is the same as the median of the rh slopes
+
+        mask_lh = abs(df_lin_mod['rh_slope']-med_lin_slope) < 0.2*abs(med_lin_slope)
+        mask_rh = abs(df_lin_mod['lh_slope']-med_lin_slope) < 0.2*abs(med_lin_slope)
+
+        print("Non flat region")
+        print(df_lin_mod)
+        print(mask_lh|mask_rh)
+
+        #df_lin_mod = df_lin_mod[(mask_lh) | (mask_rh)]
+        #print("Final linear region",df_lin_mod)
+
+        df_lin = df_lin_mod[(mask_lh) | (mask_rh)]
+        print("Final linear region")
+        print(df_lin)
+
+        '''
         max_df = df[y_arr].max()
         max_df_index = df.index[df[y_arr] == max_df].max()
         min_df = df[ df[y_arr]>0 ][y_arr].min()
@@ -97,14 +169,42 @@ class vref2D_scan_analyzer(analyzer):
         
         df_lin = pd.DataFrame()
         #This will take care of both positive (vrefnoinv) and negative (vrefinv) slopes
-        #'''
         if imin_new > imax_new:
             df_lin = df[(df.index <= imin_new) & (df.index >= imax_new)]
             
         elif imin_new < imax_new:
             df_lin = df[(df.index >= imin_new) & (df.index <= imax_new)]
-        #'''    
+        '''
 
+        '''  
+        lin_two_slope = pd.DataFrame()
+        if x_arr == 'inv_vals': #Just for debugging
+            
+            print("Supposed dataframe for fitting")
+            print(df_lin)
+            #Try to remove outlier points here
+            for i in df_lin.index:
+                for j in df_lin.index:
+                    if j>=i: #Skipping to avoid overcounting
+                        continue
+                    lin_two_slope['pt_1'] = j
+                    lin_two_slope['pt_2'] = i
+                    
+                    y_i = df_lin.loc[df_lin.index == i,y_arr].values[0]
+                    y_j = df_lin.loc[df_lin.index == j,y_arr].values[0]
+                    x_i = df_lin.loc[df_lin.index == i,x_arr].values[0]
+                    x_j = df_lin.loc[df_lin.index == j,x_arr].values[0]
+
+                    print("Indices",i,j)
+                    print("y and x coordinates",y_i,y_j,x_i,x_j)
+                    lin_two_slope['slope'] = (y_i - y_j)/(x_i - x_j)
+                    print((y_i - y_j)/(x_i - x_j))
+
+            print()
+            print("Dataframe for combo of slopes")
+            print(lin_two_slope)
+            print()
+        '''
         '''
         if imin > imax:
             df_lin = df[(df.index <= imin) & (df.index >= imax)]
@@ -122,8 +222,48 @@ class vref2D_scan_analyzer(analyzer):
             print(slope_init,offset_init)
             
             #m, b = np.polyfit(xs.to_list(), df[ df[x_arr].isin(xs.to_list()) ][y_arr].to_list(), 1)
+
+            #Old method for fitting
             m, b = curve_fit(lambda x,a,b:a*x+b, df_lin[x_arr], df_lin[y_arr], p0=[slope_init,offset_init])
+
+            df_exp = m[0]*xs + m[1]
+            chi = chisquare(df_lin[y_arr],f_exp=df_exp)
+            print("Chi square and p value",chi,chi[0],chi[1])
+            print(df_lin[y_arr])
+            print(df_exp)
+            # Defining the various parameters
+            '''
+            params = Parameters()
+            params.add('m', value = slope_init)
+            # Intercept is made fixed at 0.0 value
+            params.add('c', value = offset_init)
+
+            print("Initial guesses of m and c",slope_init,offset_init)
+            x = df_lin[x_arr].to_numpy()
+            y = df_lin[y_arr].to_numpy()
+            print(x)
+            print(y)
+            print("Type of the arrays used for fitting",type(x),type(y))
+
+            # Calling the minimize function. Args contains the x and y data.
+            fitted_params = minimize(self.lin_fit, params, args=(x,y))
+            #fitted_params = minimize(self.lin_fit(params['m'],params['c'],x,y))
+
+            # Getting the fitted values
+            m = fitted_params.params['m'].value
+            c = fitted_params.params['c'].value    
+
+            # Printing the fitted values
+            print('The slope (m) is ', m)
+            print('The intercept (c) is ', c)
+
+            # Pretty printing all the statistical data
+            print(fit_report(fitted_params))
+
+            #Trying new method for fitting from lmfit since we want chi squared
+            '''
             return xs, m, b
+            #return xs, m, c
         else:
             return xs,-1,-1
 
@@ -153,6 +293,7 @@ class vref2D_scan_analyzer(analyzer):
             print("Halves",nhalf) 
             
             df = data_chip.query('channeltype==0').groupby(['chip', 'half', 'Noinv_vref', 'Inv_vref'])[['adc_mean','adc_stdd']].median()
+            #df = data_chip.query('channeltype==0').groupby(['chip', 'half', 'Noinv_vref', 'Inv_vref'])[['adc_mean','adc_stdd']].mean()
             df.rename(columns={'adc_mean': 'pedestal', 'adc_stdd': 'noise'}, inplace=True)
             print(df)
             #print(df.index[1][3])
@@ -176,6 +317,7 @@ class vref2D_scan_analyzer(analyzer):
                 chip_key_name = rockeys[int(chip)] #converted to int as we only have 1 chip for now
 
             for half in nhalf:
+            #for half in [0]:
                 df_inv_fit = pd.DataFrame()
                 df_noinv_fit = pd.DataFrame()
                 for i in range(len(df)):
@@ -198,9 +340,10 @@ class vref2D_scan_analyzer(analyzer):
                 print(df_noinv_fit)
                 
                 print("Finding fit parameters for vrefinv")
-                xs_inv, alpha_inv, beta_inv = self.fit( df_inv_fit, 'ped', 'inv_vals',1.05,0.95)
+                xs_inv, alpha_inv, beta_inv = self.fit( df_inv_fit, 'ped', 'inv_vals', 1.05, 0.95, chip, half, 0.05)
                 print(xs_inv)
                 print(alpha_inv)
+                #print(beta_inv) #Extra from lmfit
             
                 #Plotting 1D variation in vrefinv (vrefnoinv fixed) along with linear fit
                 ax = axes[half]
@@ -210,6 +353,8 @@ class vref2D_scan_analyzer(analyzer):
 
                 ax.scatter(df_inv_fit['inv_vals'], df_inv_fit['ped'],marker='o', label='Half_'+str(half))
                 ax.plot(xs_inv, alpha_inv[0]*xs_inv + alpha_inv[1])
+
+                #ax.plot(xs_inv, alpha_inv*xs_inv + beta_inv)
                 ax.set_ylim(0,1023)
 
                 fig.suptitle("pedestal_1D_vs_vrefinv_chip_"+str(chip),y=0.93)
@@ -237,9 +382,10 @@ class vref2D_scan_analyzer(analyzer):
                     plt.close(fig)
 
                 print("Finding fit parameters for vrefnoinv")
-                xs_noinv, alpha_noinv, beta_noinv = self.fit( df_noinv_fit, 'ped', 'noinv_vals',1,1)
+                xs_noinv, alpha_noinv, beta_noinv = self.fit( df_noinv_fit, 'ped', 'noinv_vals', 1, 1, chip, half, 0.002)
                 print(xs_noinv)
                 print(alpha_noinv)
+                #print(beta_noinv) #Extra from lmfit
 
                 #Plotting 1D variation in vrefinv (vrefnoinv fixed) along with linear fit
                 ax1 = axes1[half]
@@ -249,6 +395,8 @@ class vref2D_scan_analyzer(analyzer):
 
                 ax1.scatter(df_noinv_fit['noinv_vals'], df_noinv_fit['ped'],marker='o', label='Half_'+str(half))
                 ax1.plot(xs_noinv, alpha_noinv[0]*xs_noinv + alpha_noinv[1])
+
+                #ax.plot(xs_noinv, alpha_noinv*xs_noinv + beta_noinv)
                 ax1.set_ylim(0,1023)
 
                 fig1.suptitle("pedestal_1D_vs_vrefnoinv_chip_"+str(chip),y=0.93)
@@ -263,6 +411,8 @@ class vref2D_scan_analyzer(analyzer):
                 vnoinv_final = noinv_fix #This is just because that was the original value in the config file
                 vinv_final = -1
                 vinv_fit = (target - alpha_inv[1])/alpha_inv[0]
+
+                #vinv_fit = (target - beta_inv)/alpha_inv
                 print("Value not rounded",vinv_fit)
                 if vinv_fit % 1 < 0.5:
                     vinv_final = int(vinv_fit)
@@ -285,8 +435,14 @@ class vref2D_scan_analyzer(analyzer):
                 print("final value of vinv",vinv_final)
                 print("final value of vnoinv",vnoinv_final)
 
-                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Inv_vref','Inv_slope','Inv_y_int','Noinv_vref','Noinv_slope','Noinv_y_int','target'],
-                [int(vinv_final),round(float(alpha_inv[0]),3),round(float(alpha_inv[1]),3),int(vnoinv_final),round(float(alpha_noinv[0]),3),round(float(alpha_noinv[1]),3),target])
+                nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Inv_vref','Inv_slope','Inv_y_int','Noinv_vref','Noinv_slope','Noinv_y_int'],
+                [int(vinv_final),round(float(alpha_inv[0]),3),round(float(alpha_inv[1]),3),int(vnoinv_final),round(float(alpha_noinv[0]),3),round(float(alpha_noinv[1]),3)])
+
+                #nestedConf = analysis_misc.set_key_dict(nestedConf,[int(half),'ReferenceVoltage','sc',chip_key_name],['Inv_vref','Inv_slope','Inv_y_int','Noinv_vref','Noinv_slope','Noinv_y_int'],
+                #[int(vinv_final),round(float(alpha_inv),3),round(float(beta_inv),3),int(vnoinv_final),round(float(alpha_noinv),3),round(float(beta_noinv),3)])
+
+                nestedConf = analysis_misc.set_key_dict(nestedConf,['sc','chip_'+str(chip),'target_full'],['half_'+str(half)],
+                [round(float(target),3)])
 
                 cfg[chip_key_name]['sc']['ReferenceVoltage'][half]['Inv_vref'] = int(vinv_final)
                 cfg[chip_key_name]['sc']['ReferenceVoltage'][half]['Noinv_vref'] = int(vnoinv_final)
@@ -304,9 +460,10 @@ class vref2D_scan_analyzer(analyzer):
         
         print("Saved new config file as:"+"Vref2D_fit.yaml")    
         #'''    
+        '''
         with open(configFile+"_vref2D_full_aligned.yaml", "w") as o:
             yaml.dump(cfg, o)
         
         print("Saved new config file as:"+configFile+"_vref2D_full_aligned.yaml")    
-     
+        '''
 
