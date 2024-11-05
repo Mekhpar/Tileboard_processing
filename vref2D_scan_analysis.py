@@ -103,6 +103,8 @@ class vref2D_scan_analyzer(analyzer):
         print(df['lh_slope'])
         print(df['rh_slope'])
 
+        #==================================================================Plotting the left and right handed derivatives==============================================================
+        
         fig, axes = plt.subplots(1,2,figsize=(30,15),sharey=False)  
         ax = axes[0]
         ax.xaxis.grid(True)
@@ -119,27 +121,148 @@ class vref2D_scan_analyzer(analyzer):
 
         fig.savefig("%s/derivative_vs_%s_chip_%d_half_%d.png"%(self.odir,x_arr,chip,half),format='png',bbox_inches='tight') 
 
+        #=============================================================================================================================================================================
+
+
+        #==================================================================Putting flat region and slope constraints==============================================================
+
         #This removes all slopes close to 0, which means that the fairly flat region generally found at the beginning and end of vrefinv scan will not be included in the fit
-        df_lin_mod = df[abs(df['rh_slope'])>=zero_slope_limit]
+        #This condition is also relaxed, so that only points that are flat on both sides are considered
+        df_lin_mod = df[(abs(df['rh_slope'])>=zero_slope_limit) | (abs(df['lh_slope'])>=zero_slope_limit)]
 
         med_lin_slope = df_lin_mod['rh_slope'].median()
         #Probably only taking one type of derivative here (the right handed one)
         print("Median for the non flat region in rh",med_lin_slope) #Obviously median of lh slopes is the same as the median of the rh slopes
+        print("Limits of slope considered for linear region",0.7*med_lin_slope,1.3*med_lin_slope)
+        #mask_lh = abs(df_lin_mod['lh_slope']-med_lin_slope) < 0.2*abs(med_lin_slope)
+        #mask_rh = abs(df_lin_mod['rh_slope']-med_lin_slope) < 0.2*abs(med_lin_slope)
 
-        mask_lh = abs(df_lin_mod['rh_slope']-med_lin_slope) < 0.2*abs(med_lin_slope)
-        mask_rh = abs(df_lin_mod['lh_slope']-med_lin_slope) < 0.2*abs(med_lin_slope)
+        #0.2 is changed to 0.3 to include edge cases and anyway we are having an extra intercept condition as well
+        mask_lh = abs(df_lin_mod['lh_slope']-med_lin_slope) < 0.3*abs(med_lin_slope)
+        mask_rh = abs(df_lin_mod['rh_slope']-med_lin_slope) < 0.3*abs(med_lin_slope)
+
+        #This is just to make sure the right intercept is assigned to a point
+        mask_strict_lh = abs(df_lin_mod['lh_slope']-med_lin_slope) < 0.2*abs(med_lin_slope)
+        mask_strict_rh = abs(df_lin_mod['rh_slope']-med_lin_slope) < 0.2*abs(med_lin_slope)
+
+        mask_suppl_lh = abs(df_lin_mod['lh_slope']-med_lin_slope) < abs(df_lin_mod['rh_slope']-med_lin_slope)
+        mask_suppl_rh = abs(df_lin_mod['rh_slope']-med_lin_slope) < abs(df_lin_mod['lh_slope']-med_lin_slope)
 
         print("Non flat region")
         print(df_lin_mod)
         print(mask_lh|mask_rh)
+        #print(mask_lh & mask_rh)
 
-        #df_lin_mod = df_lin_mod[(mask_lh) | (mask_rh)]
+        #df_lin_mod = df_lin_mod[(mask_lh) & (mask_rh)]
         #print("Final linear region",df_lin_mod)
 
-        df_lin = df_lin_mod[(mask_lh) | (mask_rh)]
+        df_lin_slope = df_lin_mod[(mask_lh) | (mask_rh)]
+        #df_lin_slope = df_lin_mod[(mask_lh) & (mask_rh)]
+        print("Derivative selected linear region")
+        print(df_lin_slope)
+
+        #=============================================================================================================================================================================
+
+
+        #==================================================================Left and right handed intercept calculation==============================================================
+        df_lin_slope['lh_intercept'] = df_lin_slope[y_arr] - df_lin_slope['lh_slope']*df_lin_slope[x_arr]
+        df_lin_slope['rh_intercept'] = df_lin_slope[y_arr] - df_lin_slope['rh_slope']*df_lin_slope[x_arr]
+
+        print("Intercepts with lh and rh slopes")
+        print(df_lin_slope['lh_intercept'])
+        print(df_lin_slope['rh_intercept'])
+        #=============================================================================================================================================================================
+
+
+        #==================================================================Plotting the left and right handed intercepts==============================================================
+
+        fig, axes = plt.subplots(1,2,figsize=(30,15),sharey=False)  
+        ax = axes[0]
+        ax.xaxis.grid(True)
+        ax.yaxis.grid(True)
+        print("x axis for plotting lh intercept")
+        
+        ax.scatter(df_lin_slope[~df_lin_slope['lh_intercept'].isna()][x_arr], df_lin_slope[~df_lin_slope['lh_intercept'].isna()]['lh_intercept']) 
+
+        ax = axes[1]
+        ax.xaxis.grid(True)
+        ax.yaxis.grid(True)
+
+        ax.scatter(df_lin_slope[~df_lin_slope['rh_intercept'].isna()][x_arr], df_lin_slope[~df_lin_slope['rh_intercept'].isna()]['rh_intercept'])
+
+        fig.savefig("%s/intercept_vs_%s_chip_%d_half_%d.png"%(self.odir,x_arr,chip,half),format='png',bbox_inches='tight') 
+
+        #=============================================================================================================================================================================
+
+
+        #======================================================================Combo intercept calculation============================================================================
+        df_inter = df_lin_slope.copy()
+
+        df_inter['combo_intercept'] = df_lin_slope['rh_intercept'] #First populate and then replace the problematic values
+        '''
+        print("Left intercept required")
+        print((mask_strict_lh)&~(mask_strict_rh))
+        print("Right intercept required")
+        print(~(mask_strict_lh)&(mask_strict_rh))
+
+        print("Supplementary masks for slope comparison")
+        print(mask_suppl_lh)
+        print(mask_suppl_rh)
+        '''
+        
+        #print(df_inter)
+        df_inter.loc[(mask_strict_lh)&~(mask_strict_rh)&(mask_rh),'combo_intercept'] = df_lin_slope['lh_intercept']
+        df_inter.loc[(mask_strict_lh)&~(mask_strict_rh)&(mask_rh),'net_mask'] = 'edge of linear region (right slope between 20 and 30%)'
+        
+        df_inter.loc[~(mask_strict_lh)&(mask_lh)&(mask_strict_rh),'combo_intercept'] = df_lin_slope['rh_intercept']
+        df_inter.loc[~(mask_strict_lh)&(mask_lh)&(mask_strict_rh),'net_mask'] = 'edge of linear region (left slope between 20 and 30%)'
+
+
+        df_inter.loc[(mask_strict_lh)&(mask_strict_rh)&(mask_suppl_lh),'combo_intercept'] = df_lin_slope['lh_intercept']
+        df_inter.loc[(mask_strict_lh)&(mask_strict_rh)&(mask_suppl_lh),'net_mask'] = 'good linear region (both slopes within 20%)'
+
+        df_inter.loc[(mask_strict_lh)&(mask_strict_rh)&(mask_suppl_rh),'combo_intercept'] = df_lin_slope['rh_intercept']
+        df_inter.loc[(mask_strict_lh)&(mask_strict_rh)&(mask_suppl_rh),'net_mask'] = 'good linear region (both slopes within 20%)'
+
+
+        df_inter.loc[(mask_lh)&~(mask_rh),'combo_intercept'] = df_lin_slope['lh_intercept']
+        df_inter.loc[(mask_lh)&~(mask_rh),'net_mask'] = 'Edge of flat region (right slope outside 30%)'
+        df_inter.loc[~(mask_lh)&(mask_rh),'combo_intercept'] = df_lin_slope['rh_intercept']
+        df_inter.loc[~(mask_lh)&(mask_rh),'net_mask'] = 'Edge of flat region (left slope outside 30%)'
+
+        print("Combo intercept and Category of point")
+        print(df_inter)
+
+        #=============================================================================================================================================================================
+
+
+        #======================================================================Combo intercept plotting===============================================================================
+        fig, axes = plt.subplots(1,1,figsize=(15,15),sharey=False)  
+        ax = axes
+        ax.xaxis.grid(True)
+        ax.yaxis.grid(True)
+        print("x axis for plotting combo intercept")
+        
+        ax.scatter(df_inter[~df_inter['combo_intercept'].isna()][x_arr], df_inter[~df_inter['combo_intercept'].isna()]['combo_intercept']) 
+        plt.gca().set_ylim(bottom=0)
+        fig.savefig("%s/combo_intercept_vs_%s_chip_%d_half_%d.png"%(self.odir,x_arr,chip,half),format='png',bbox_inches='tight') 
+
+        #=============================================================================================================================================================================
+
+        #==================================================================Putting flat region and value constraints==================================================================
+
+        med_intercept = df_inter['combo_intercept'].median()
+        #Probably only taking one type of derivative here (the right handed one)
+        print("Median for the non flat region in rh",med_intercept) #Obviously median of lh slopes is the same as the median of the rh slopes
+        print("Limits of intercept considered for linear region",0.9*med_intercept,1.1*med_intercept)
+
+        #Putting more stringent limits here because the y intercept values are a little large
+        df_lin = df_inter[abs(df_inter['combo_intercept']-med_intercept) < 0.1*abs(med_intercept)]
+
         print("Final linear region")
         print(df_lin)
 
+        #=============================================================================================================================================================================
         '''
         max_df = df[y_arr].max()
         max_df_index = df.index[df[y_arr] == max_df].max()
