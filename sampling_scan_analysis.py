@@ -1,13 +1,16 @@
 from level0.analyzer import *
 from scipy.optimize import curve_fit
+import scipy
 import glob
 from matplotlib.ticker import AutoMinorLocator
+import matplotlib
 from nested_dict import nested_dict
 import pandas as pd
 import numpy as np
 
 import analysis.level0.miscellaneous_analysis_functions as analysis_misc
 import analysis.level0.pedestal_run_analysis
+import awkward as ak
 
 #import miscellaneous_analysis_functions as analysis_misc
 #import pedestal_run_analysis
@@ -227,6 +230,8 @@ class overall_analyzer(analyzer):
         #.set_index("entries")
         inj_pulse = inj_half[(inj_half['channel']==channel)].copy()
         inj_pulse = inj_pulse.astype({'adc_median':float})
+        print("Pulse df for channel",channel)
+        print(inj_pulse)
         max_pulse = max(inj_pulse['adc_median'])
 
         inj_ped = inj_half[(inj_half['channel']==channel) & (inj_half['entries']<4)].copy()
@@ -242,6 +247,7 @@ class overall_analyzer(analyzer):
         
     def get_width(self,chip,half,channel,height_percent,sign): #This will be used for both rising and falling widths
         
+        print("Channel number",channel)
         (inj_pulse, max_pulse, pedestal_baseline, BX_amp, phase_amp) = self.get_pulse(chip,half,channel)
         net_phase = phase_amp+16*BX_amp
         pulse_amp = max_pulse - pedestal_baseline
@@ -283,7 +289,8 @@ class overall_analyzer(analyzer):
         conv_gain = analysis_misc.get_conveyor_gain(config_file)
         print(conv_gain)
 
-        cmap = cm.get_cmap('viridis') 
+        #cmap = cm.get_cmap('viridis') 
+        cmap = matplotlib.colormaps['viridis']
         
         #Optional plotting (both halves in one plot) with linear fit instead of calculating chi_squared
         
@@ -415,7 +422,7 @@ class overall_analyzer(analyzer):
         
         gain_lh = self.get_lh_range(odir)
         #Optional plotting (both halves in one plot) with linear fit instead of calculating chi_squared
-        ped_data = read_files('/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/data/TB3_D8_10/pedestal_run_2','pedestal_run')
+        ped_data = read_files('/home/hgcal/Desktop/kria/HGCROC3a/hexactrl-sw/hexactrl-script-anurag-cleanup/data/TB3_D8/pedestal_run_1','pedestal_run')
         self.chip_half("TB3_D8",injectedChannels,odir)
         for chip in self.chip_dict.keys():
             print("ROC number",chip)
@@ -564,7 +571,46 @@ class overall_analyzer(analyzer):
                 print("Number of continuous glitches in total",sig_chan['glitch_ct'].values[phase])  
         return sig_chan  
 
-        
+    def npeaks_low(self,df,chan,pulse_amp,pedestal_baseline,num_peaks:dict,bad_chan):
+        df = df.dropna()
+        print("Dataframe without weird values")
+        print(df)
+        print("Max amplitude",pulse_amp)
+        #peaks, _ = scipy.signal.find_peaks(df['adc_median'], threshold=0) #absolute value kept for debugging
+        #threshold = pedestal_baseline+ 0.2*pulse_amp
+        #peaks, _ = scipy.signal.find_peaks(df['adc_median'], height=pedestal_baseline+ 0.1*pulse_amp, prominence = 0.08*pulse_amp) #absolute value kept for debugging
+        peaks, _ = scipy.signal.find_peaks(df['adc_median'], prominence = 0.08*pulse_amp) #absolute value kept for debugging
+        print("Peaks found for channel",chan)
+        print(peaks)
+
+        zero_num = 0
+        for peak in peaks:
+            zero_num += 1
+            current_BX = df['BX'].values[peak]
+            peak_time = (peak+current_BX+1)*25/16.0
+            num_peaks = analysis_misc.set_key_dict(num_peaks,['ch_'+str(chan)],['num_'+str(zero_num)],[float(peak_time)])
+            
+
+        '''
+        for peak in peaks:
+            print("Peak",peak)
+            print(df['adc_median'].values[peak])
+            
+            print(current_BX)
+            print()
+        '''
+        '''
+        for adc_vals in df['adc_median'].values:
+            print("actual indices excluding 15th phase",adc_vals)
+        '''
+        if zero_num >= 3: #Here 3 is used because the prominence feature in the find_peaks gets rid of the smaller peaks
+            print("Potentially bad waveform")
+            bad_chan.append(int(chan))
+            
+        return num_peaks
+
+    #===========================================Mostly not going to be using this - using the automated peak finder from scipy========================
+
     def zero_crossing_pts(self,df,chan,num_peaks:dict,bad_chan):
         df = df.dropna()
         print("Dataframe without weird values")
@@ -612,28 +658,33 @@ class overall_analyzer(analyzer):
             bad_chan.append(int(chan))
         return num_peaks
 
+    #=================================================================================================================================================
+
 
     def channel_sampling_scan_internal_check(self,device_type,injectedChannels,file_num,odir,process,subprocess,height_percent,config_file,fout=''):
-        directory = "/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
+        directory = "/home/hgcal/Desktop/kria/HGCROC3a/hexactrl-sw/hexactrl-script-anurag-cleanup/analysis/level0/Pass_criteria/%s_limits.yaml"%(device_type)
         nestedConf = nested_dict()
         
         #Getting gain from config file name
         conv_gain = analysis_misc.get_conveyor_gain(config_file)
         print(conv_gain)
-        cmap = cm.get_cmap('viridis') 
+        #cmap = cm.get_cmap('viridis') 
         calib = float(self.get_parameter_value(odir,'calib'))
         print(calib)
 
-        no_phase_chan = [] #This is the list of channels, which are not necessarily bad but do not satisfy at least one of the criteria right away and it is best if these are excluded from the list of channels used to calculate the max adc phase       
+        #no_phase_chan = [] #This is the list of channels, which are not necessarily bad but do not satisfy at least one of the criteria right away and it is best if these are excluded from the list of channels used to calculate the max adc phase       
       
+        no_phase_chan = dict() #This should have a list of channels for each chip
+
         #A lot of the methods, for example whether fitting is done or the value (for amplitude and widths) is directly picked from the yaml file depend on whether the gain is for low or high range, so this parameter is very crucial
         gain_lh = self.get_lh_range(odir)
 
         num_peaks = dict()
+        pulse_amp_chan = dict()
 
         amp_limit = 0
         #Optional plotting (both halves in one plot) with linear fit instead of calculating chi_squared
-        ped_data = read_files('/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/data/TB3_D8_10/pedestal_run_2','pedestal_run')
+        ped_data = read_files('/home/hgcal/Desktop/kria/HGCROC3a/hexactrl-sw/hexactrl-script-anurag-cleanup/data/TB3_D8/pedestal_run_1','pedestal_run')
         self.chip_half("TB3_D8",injectedChannels,odir)
         for chip in self.chip_dict.keys():
             print("ROC number",chip)
@@ -643,12 +694,20 @@ class overall_analyzer(analyzer):
             zero_amp_chan = []
 
             amp_arr = []
+            no_phase_chan_arr = []
             for half in self.chip_dict[chip].keys():
                 print("half number",half)
 
                 inj_half = self.chip_dict[chip][half]
-                injectedChannels_half = inj_half['channel'].unique()  
 
+                injectedChannels_half = inj_half['channel'].unique()  
+                #Removed and only few channels added for debugging
+                '''
+                if half == 1:
+                    injectedChannels_half = [70,68,50]
+                elif half == 0:
+                    injectedChannels_half = [18,23,25]
+                '''
                 '''
                 if half == 0:
                     injectedChannels_half = [14] #Just for debugging
@@ -677,23 +736,29 @@ class overall_analyzer(analyzer):
                 #rise_wd = analysis_misc.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip,"Rise")
                 #print("Rising width from sampling scan for half", half,"is",rise_wd)
 
-                '''
-                inv_prod_mean, ratio_rf_y = analysis_misc.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip)
-                
-                full_wd = inv_prod_mean/slope
-                rise_wd_y = []
-                fall_wd_y = []
-                for i in range(len(ratio_rf_y)):
-                    fall_wd = full_wd/(1+ratio_rf_y[i])
-                    rise_wd = full_wd*ratio_rf_y[i]/(1+ratio_rf_y[i])
+                #'''
+                #==========================================Only to be done for high range setting===================================
 
-                    fall_wd_y = np.append(fall_wd_y,fall_wd)
-                    rise_wd_y = np.append(rise_wd_y,rise_wd)
-                #analysis_misc.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip,"Rise")
-                #analysis_misc.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip,"Fall")
-                print(rise_wd_y,fall_wd_y)
-                print()
-                '''
+                if gain_lh == 1:
+                    print("File for obtaining pulse width criteria",directory)
+                    inv_prod_mean, ratio_rf_y = analysis_misc.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip)
+                    
+                    full_wd = inv_prod_mean/slope
+                    rise_wd_y = []
+                    fall_wd_y = []
+                    for i in range(len(ratio_rf_y)):
+                        fall_wd = full_wd/(1+ratio_rf_y[i])
+                        rise_wd = full_wd*ratio_rf_y[i]/(1+ratio_rf_y[i])
+
+                        fall_wd_y = np.append(fall_wd_y,fall_wd)
+                        rise_wd_y = np.append(rise_wd_y,rise_wd)
+                    #analysis_misc.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip,"Rise")
+                    #analysis_misc.get_width_ch_nos(process,subprocess,directory,odir,inj,conv_gain,chip,"Fall")
+                    print(rise_wd_y,fall_wd_y)
+                    print()
+
+                #===================================================================================================================
+                #'''
 
                 for injectedChannel in injectedChannels_half:
                     print("Channel number",injectedChannel)
@@ -730,7 +795,8 @@ class overall_analyzer(analyzer):
 
                     pulse_amp = max_pulse - pedestal_baseline
                     print("Pulse amplitude", pulse_amp)
-                    
+                    pulse_amp_chan = analysis_misc.set_key_dict(pulse_amp_chan,['chip_'+str(chip)],['ch_'+str(injectedChannel)],[float(pulse_amp)])
+
                     if (abs(max_pulse - 1023) < 0.5) & (len(inj_pulse.loc[inj_pulse['adc_median'] == max_pulse,'Phase'])>2):
                         print("Saturated pulse - do not attempt to calculate pulse width and pick best phase for injection scan!!")
                         sat_flag = 1
@@ -752,48 +818,60 @@ class overall_analyzer(analyzer):
                         print("Pulse dataframe")
                         print(inj_pulse)
 
-                    #Peak finder using negative running derivative to find good maxima since low range pulses seem to have multiple decaying peaks
-                        for i in range(inj_pulse.index.min()+1,inj_pulse.index.max()+1):
-                            inj_pulse.loc[i,'slope'] = (inj_pulse.loc[i,'adc_median'] - inj_pulse.loc[i-1,'adc_median'])/(inj_pulse.loc[i,'time'] - inj_pulse.loc[i-1,'time'])
+                        #Peak finder using negative running derivative to find good maxima since low range pulses seem to have multiple decaying peaks
+                        #==========================================Only to be done for low range setting====================================
 
-                        for i in range(inj_pulse.index.min()+1,inj_pulse.index.max()+1):
-                            #print("Number of next entries available for running average")
-                            ent = min(6,inj_pulse.index.max()+1-i)
-                            #print(ent)
-                            inj_pulse.loc[i,'slope_conv'] = 0
-                            for j in range(0,ent):
-                                inj_pulse.loc[i,'slope_conv'] += inj_pulse.loc[i+j,'slope']
-                                #print("Entry number",j)
+                        if gain_lh == 0:
+                            for i in range(inj_pulse.index.min()+1,inj_pulse.index.max()+1):
+                                inj_pulse.loc[i,'slope'] = (inj_pulse.loc[i,'adc_median'] - inj_pulse.loc[i-1,'adc_median'])/(inj_pulse.loc[i,'time'] - inj_pulse.loc[i-1,'time'])
 
-                            inj_pulse.loc[i,'slope_conv'] = inj_pulse.loc[i,'slope_conv']/(ent)
+                            for i in range(inj_pulse.index.min()+1,inj_pulse.index.max()+1):
+                                #print("Number of next entries available for running average")
+                                ent = min(6,inj_pulse.index.max()+1-i)
+                                #print(ent)
+                                inj_pulse.loc[i,'slope_conv'] = 0
+                                for j in range(0,ent):
+                                    inj_pulse.loc[i,'slope_conv'] += inj_pulse.loc[i+j,'slope']
+                                    #print("Entry number",j)
 
-                        num_peaks = self.zero_crossing_pts(inj_pulse,injectedChannel,num_peaks,mult_peak_chan)
-                        #print("Current dict zero crossing")
-                        #print(num_peaks)
+                                inj_pulse.loc[i,'slope_conv'] = inj_pulse.loc[i,'slope_conv']/(ent)
 
-                        ''' 
-                        rise_wd = self.get_width(chip,half,i,height_percent,1)
-                        fall_wd = self.get_width(chip,half,i,height_percent,-1)
-                        print("Pulse widths",rise_wd,fall_wd)
-                        
-                        #Percentage limits are usually better than absolute count wise leeways
-                        #if (rise_wd>=np.min(rise_wd_y)-0.5) & (rise_wd<=np.max(rise_wd_y)+0.5):
-                        if (rise_wd >= 0.85*np.min(rise_wd_y)) & (rise_wd <= 1.15*np.max(rise_wd_y)):
-                            pass
-                        else:
-                            print("Potentially bad rise width")        
-                            rise_flag = 1
-                        
-                        #if (fall_wd>=np.min(fall_wd_y)-1) & (fall_wd<=np.max(fall_wd_y)+1):
-                        if (fall_wd >= 0.9*np.min(fall_wd_y)) & (fall_wd <= 1.1*np.max(fall_wd_y)):
-                            pass
-                        else:
-                            print("Potentially bad fall width")   
-                            fall_flag = 1 
-                        '''
+                            #num_peaks = self.zero_crossing_pts(inj_pulse,injectedChannel,num_peaks,mult_peak_chan)
+                            num_peaks = self.npeaks_low(inj_pulse,injectedChannel,pulse_amp,pedestal_baseline,num_peaks,mult_peak_chan)
+                            #print("Current dict zero crossing")
+                            #print(num_peaks)
+
+                        #===================================================================================================================
+
+
+                        #''' 
+                        #==========================================Only to be done for high range setting===================================
+
+                        elif gain_lh == 1:
+                            rise_wd = self.get_width(chip,half,injectedChannel,height_percent,1)
+                            fall_wd = self.get_width(chip,half,injectedChannel,height_percent,-1)
+                            print("Pulse widths",rise_wd,fall_wd)
+                            
+                            #Percentage limits are usually better than absolute count wise leeways
+                            #if (rise_wd>=np.min(rise_wd_y)-0.5) & (rise_wd<=np.max(rise_wd_y)+0.5):
+                            if (rise_wd >= 0.85*np.min(rise_wd_y)) & (rise_wd <= 1.15*np.max(rise_wd_y)):
+                                pass
+                            else:
+                                print("Potentially bad rise width")        
+                                rise_flag = 1
+                            
+                            #if (fall_wd>=np.min(fall_wd_y)-1) & (fall_wd<=np.max(fall_wd_y)+1):
+                            if (fall_wd >= 0.9*np.min(fall_wd_y)) & (fall_wd <= 1.1*np.max(fall_wd_y)):
+                                pass
+                            else:
+                                print("Potentially bad fall width")   
+                                fall_flag = 1 
+
+                        #===================================================================================================================
+                        #'''
                     print("List of flags:","sat:",sat_flag,"amp:",amp_flag,"rise_wd:",rise_flag, "fall_wd:",fall_flag,"glitch:",glch_flag)
                     if ((sat_flag == 1) | (amp_flag == 1) | (rise_flag == 1) | (fall_flag == 1) | (glch_flag == 1)):
-                        no_phase_chan.append(i)
+                        no_phase_chan_arr.append(i)
                     
                     print()        
 
@@ -822,20 +900,27 @@ class overall_analyzer(analyzer):
             with open(odir + "num_peaks.yaml",'w') as file:
                 print(yaml.dump(num_peaks,file,sort_keys=False))
 
+        with open(odir + "pulse_amp.yaml",'w') as file:
+            print(yaml.dump(pulse_amp_chan,file,sort_keys=False))
+
         with open(odir + "sampling_scan_summary.yaml",'w') as ana_file:
             print(yaml.dump(nestedConf.to_dict(),ana_file,sort_keys=False))
 
+        no_phase_chan = analysis_misc.set_key_dict(no_phase_chan,[],['chip' + str(chip)],[no_phase_chan_arr])
         return no_phase_chan
             
 
     def makePlots(self, injectedChannels):
         nchip = len( self.data.groupby('chip').nunique() )        
-        cmap = cm.get_cmap('Dark2')
+        #cmap = cm.get_cmap('Dark2')
+        cmap = matplotlib.colormaps['Dark2']
 
         inj_data = self.data[ (self.data['channeltype']==0) & (self.data['channel'].isin(injectedChannels)) ].copy()
         inj_data['time'] = inj_data.apply( lambda x: 25/16.0*(x.Phase+16*x.BX),axis=1 )
         
         #Selected channels only for debugging 
+        #injectedChannels = [18,23,25,70,68,50]
+
         #injectedChannels = [4,9,13,14,15,23,28,30]
         #injectedChannels = [14]
         #print to csv file for grouping with the data from other files
@@ -847,15 +932,16 @@ class overall_analyzer(analyzer):
             
             for injectedChannel in injectedChannels:
 
-                fig, axes = plt.subplots(1,3,figsize=(16,9))
+                #fig, axes = plt.subplots(1,3,figsize=(16,9))
+                fig, axes = plt.subplots(1,1,figsize=(16,9))
                 sel_data = inj_data[ (inj_data['chip']==chip) & (inj_data['channel']==injectedChannel) ]
                 sel_data = sel_data.sort_values(by=['time'],ignore_index=True)
-                
+
                 sel_data = sel_data.astype({'adc_median':float})
                 print("Original dataframe")
                 print(sel_data['adc_median'])
-                ax = axes[0]
-
+                #ax = axes[0]
+                ax = axes
                 for i in range(1,len(sel_data['adc_median'])):
                     sel_data.loc[i,'slope'] = (sel_data.loc[i,'adc_median'] - sel_data.loc[i-1,'adc_median'])/(sel_data.loc[i,'time'] - sel_data.loc[i-1,'time'])
 
@@ -874,6 +960,7 @@ class overall_analyzer(analyzer):
                 print()
                 print("Derivative of pulse")
                 print(sel_data['slope'])
+                #plt.xticks(range(int(inj_data.time.min()),int(inj_data.time.max()),25))
                 ax.plot( sel_data['time'], sel_data['adc_median'], color=cmap(chanColor), label=r'Channel %d'%(injectedChannel),marker='o')
                 #chanColor=chanColor+1
                                 
@@ -888,10 +975,15 @@ class overall_analyzer(analyzer):
                 ax.legend(handles=h,labels=l,loc='upper right',ncol=2)
 
                 ax.xaxis.grid(True)
-                plt.xticks(range(int(inj_data.time.min()),int(inj_data.time.max()),25))
+                ax.yaxis.grid(True)
+                ax.set_xticks(range(int(inj_data.time.min()),int(inj_data.time.max()),25))
+                #ax.set_yticks(range(int(sel_data.adc_median.min()),int(sel_data.adc_median.max()),5))
+                ax.set_yticks(range(int(sel_data.adc_median.min()),int(sel_data.adc_median.max()),1))
+                ax.set_yticklabels(range(int(sel_data.adc_median.min()),int(sel_data.adc_median.max()),1),fontsize=4)
+                #plt.xticks(range(int(inj_data.time.min()),int(inj_data.time.max()),25))
                 ax.xaxis.set_minor_locator(AutoMinorLocator(16))
 
-
+                '''
                 ax = axes[1]
                 ax.plot( sel_data['time'], sel_data['slope'], color=cmap(chanColor), label=r'Channel %d'%(injectedChannel),marker='o')
                 
@@ -899,7 +991,12 @@ class overall_analyzer(analyzer):
                 ax.legend(handles=h,labels=l,loc='upper right',ncol=2)
 
                 ax.xaxis.grid(True)
-                plt.xticks(range(int(inj_data.time.min()),int(inj_data.time.max()),25))
+                ax.yaxis.grid(True)
+                ax.set_xticks(range(int(inj_data.time.min()),int(inj_data.time.max()),25))
+
+                #ax.yaxis.set_ticks(range(int(sel_data.slope.min()),int(sel_data.slope.max()),0.5))
+                #plt.xticks(range(int(inj_data.time.min()),int(inj_data.time.max()),25))
+                
                 ax.xaxis.set_minor_locator(AutoMinorLocator(16))
 
 
@@ -911,8 +1008,14 @@ class overall_analyzer(analyzer):
                 ax.legend(handles=h,labels=l,loc='upper right',ncol=2)
 
                 ax.xaxis.grid(True)
-                plt.xticks(range(int(inj_data.time.min()),int(inj_data.time.max()),25))
+                ax.yaxis.grid(True)
+                ax.set_xticks(range(int(inj_data.time.min()),int(inj_data.time.max()),25))
+                #ax.yaxis.set_ticks(range(int(sel_data.slope_conv.min()),int(sel_data.slope_conv.max()),0.5))
+
+                #plt.xticks(range(int(inj_data.time.min()),int(inj_data.time.max()),25))
                 ax.xaxis.set_minor_locator(AutoMinorLocator(16))
+                '''
+
                 plt.savefig("%s/Sampling_scans/adc_sampling_scan_ch_%d.png"%(self.odir,injectedChannel),format='png',bbox_inches='tight') 
                 plt.close()
 
@@ -1023,49 +1126,214 @@ class overall_analyzer(analyzer):
     def fit(self,data):
         pass
 
-    def calc_bestPhase(self,injectedChannels,odir,no_phase_chan):
+    def calc_bestPhase(self, injectedChannels, gain_lh, odir, no_phase_chan):
         self.chip_half("TB3_D8",injectedChannels,odir)
 
+        print("Chip half from calc best phase",self.chip_dict)
         bx_begin, phase_begin = self.get_start_BX_phase(odir)
         print("Starting BX and phase", bx_begin, phase_begin)
 
         calib_bx = self.get_start_trigger(odir)
         print("Calibreq value",calib_bx)
         
-        BX_phase_info=dict()
+        #BX_phase_info=dict()
+        BX_phase_info=pd.DataFrame()
+        if gain_lh == 1:
+            list = ['chip','half','chan_num','phase','bx_begin','phase_begin','calib_bx']
+
+        elif gain_lh == 0:
+            list = ['chip','phase','bx_begin','phase_begin','calib_bx']
+
+        print(len(list))
+        BX_phase_info=pd.DataFrame(np.empty((0, len(list))))
+        BX_phase_info.columns = list
+
+        index_high = 0
+        index_low = 0
+
         for chip in self.chip_dict.keys():
+            index_low +=1
             print("ROC number",chip)
+            useless_channels = no_phase_chan['chip'+str(chip)]
+            #useless_channels = [7,40,51] #Some channels only for debugging
+            print("Useless channels",useless_channels) #This is a dict with keys for each chip
+
+            best_phase_net = []
+            #BX_phase_info = dict()
+
+            #=======================This loop is common to both low and high range, for low range everything is just combined later outside the loop========================
             for half in self.chip_dict[chip].keys():
+                index_high +=1
                 print("half number",half)
-                
-                inj_half = self.chip_dict[chip][half]
-                injectedChannels_half = inj_half['channel'].unique()  
-                inj = len(injectedChannels_half)
-                print("Number of injected channels", inj)
+                best_phase_half = [] #For this (low range) it does not change with the number of injected channels, so we might as well take the average over two halves
+
+                injectedChannels_half = self.chip_dict[chip][half]['channel'].unique()  
+                chan_num = len(injectedChannels_half)
+                print("Number of injected channels", chan_num)
                 print(injectedChannels_half)
-                ret = 0
-                used_inj_chan = []
-                
-                for i in injectedChannels_half:
-                    if i in no_phase_chan:
-                        pass
-                    else:
-                        used_inj_chan.append(i)
-                
-                print("Injected channels used for max phase calculation", used_inj_chan)         
-                #Average because these widths are supposed to be the same for the channels in each half
-                best_phase_half = []
+
+                used_inj_chan = np.setdiff1d(injectedChannels_half,useless_channels)            
+                print("Injected channels used for max phase calculation in each half", used_inj_chan)  
+
+            #Average because these widths are supposed to be the same for the channels in each half
                 if len(used_inj_chan)>=1:
                     for i in used_inj_chan:
-
                         (inj_pulse,max_pulse,pedestal_baseline, BX_amp, phase_amp) = self.get_pulse(chip,half,i)
                         best_phase_half.append(phase_amp+16*BX_amp) #Do NOT take the average of BX and phase separately, it could cause problems if the phases are slightly different and in different BXs
 
-                    ret = int(sum(best_phase_half)/len(best_phase_half))
-                    print("BX and phase combo", ret)
-                    BX_phase_info.setdefault(inj,ret)
+                best_phase_net.append(best_phase_half)
 
-        return BX_phase_info,bx_begin,phase_begin,calib_bx
+            #=================================================================================================================================================================
+
+                if gain_lh == 1:
+
+                    phase = int(sum(best_phase_half)/len(best_phase_half))
+                    '''
+                    BX_phase_info = analysis_misc.set_key_dict(BX_phase_info,[],
+                    ['chip','half','chan_num','phase','bx_begin','phase_begin','calib_bx'],
+                    [chip,half,inj,phase,bx_begin,phase_begin,calib_bx])
+                    '''
+
+                    for column in BX_phase_info.columns:
+                        BX_phase_info.loc[index_high,column] = eval(column)
+
+            #==========================================================Exiting the half loop==================================================================================
+            if gain_lh == 0:
+
+                best_phase_net = np.concatenate([best_phase_net[i] for i in range(len(best_phase_net))]) 
+                print("Number of channels from both halves",len(best_phase_net))
+                phase = int(sum(best_phase_net)/len(best_phase_net))
+                '''
+                BX_phase_info = analysis_misc.set_key_dict(BX_phase_info,[],
+                ['chip','phase','bx_begin','phase_begin','calib_bx'],
+                [chip,phase,bx_begin,phase_begin,calib_bx])
+                '''
+
+                for column in BX_phase_info.columns:
+                    BX_phase_info.loc[index_high,column] = eval(column)
+
+        return BX_phase_info
+
+        #=====================================================================================================================================================================
+
+    #==============This uses the above calc_bestPhase for different runs, it is only used to get around the problem of phase shifting dramatically across runs=======
+    def get_med_phase(self,odir_phase,nestedConf):
+        odir_plot = '/home/hgcal/Desktop/kria/HGCROC3b/hexactrl-sw/hgcal_qc_hexactrl-script-cleanup/data/D8_8/'
+        odir_list = ['/home/hgcal/Desktop/kria/HGCROC3b/hexactrl-sw/hgcal_qc_hexactrl-script-cleanup/data/D8_8/PreampSampling_scan_Calib_2000_1/','/home/hgcal/Desktop/kria/HGCROC3b/hexactrl-sw/hexactrl-script-anurag-cleanup/data/D8_8/PreampSampling_scan_Calib_2000_1/',
+        '/home/hgcal/Desktop/kria/HGCROC3a/hexactrl-sw/hgcal_qc_hexactrl-script-cleanup/data/TB3_D8/PreampSampling_scan_Calib_400_1/']
+        #nestedConf = dict()
+        
+        #The third one is an actual high range sampling scan and used to have an extra point for fitting
+        gain_list = []
+        runs = 0
+        same_gain_flag = 1
+        for odir in odir_list:
+            runs +=1
+            gain_lh = self.get_lh_range(odir) #Check whether gain is same for each of these set of files
+            gain_lh = 0 #Only for debugging
+            print(gain_lh)
+            if runs > 1:
+                print("Previous gain",gain_list[-1])
+                if gain_lh != gain_list[-1]:
+                    print("Runs do not have the same gain!")
+                    same_gain_flag = 0
+                    break
+
+            gain_list.append(gain_lh)
+
+        print(gain_list)
+        print(same_gain_flag)
+
+        BX_phase_net = []
+        if same_gain_flag == 1:
+            channel_df = pd.DataFrame()
+            for odir in odir_list:
+                sampling_analyzer = overall_analyzer(odir=odir)
+                files = glob.glob(odir+"/sampling_scan*.root")
+                print("Current directory",odir)
+                #print(files)
+                print("Number of sampling scan files", len(files)) 
+                for f in files:
+                    sampling_analyzer.add(f)
+
+                injectedChannels = sampling_analyzer.get_injectedChannels(odir) 
+                sampling_analyzer.mergeData()
+
+                no_phase_chan = sampling_analyzer.channel_sampling_scan_internal_check("TB3_D8",injectedChannels,len(files), odir, process='int',subprocess='preamp',height_percent=0.1,config_file = config_file,fout = odir + "analysis_summary_new.yaml")    
+                BX_phase_info = sampling_analyzer.calc_bestPhase(injectedChannels,gain_lh,odir,no_phase_chan)
+
+                print("Dictionary for best phase from calc_bestPhase")
+                print(BX_phase_info)
+                BX_phase_net.append(BX_phase_info)        
+
+            BX_phase_net = pd.concat([BX_phase_net[i] for i in range(len(BX_phase_net))],ignore_index=True) 
+
+            #====================================Will output only best phase for each chip (low range)=========================================================
+
+            if gain_list[0] == 0: #Since all gains from all runs are the same there is no need to check all the elements
+                BX_med = BX_phase_net.groupby(['chip'])[['phase']].median()
+                chip_val = BX_med.index #Only one level of index
+                for chip in chip_val:
+                    nestedConf = analysis_misc.set_key_dict(nestedConf,['low_range'],['chip_'+str(int(chip))],[int(BX_med[chip_val==chip].values[0])])
+
+            #==================================================================================================================================================
+
+
+            #====================Will output fitting parameters from best phase vs number of channels for each chip (high range)===============================
+
+            elif gain_list[0] == 1: #Since all gains from all runs are the same there is no need to check all the elements
+
+                #new_chip = {'chip':1.0,'chan_num':6.0,'phase':14.0} #Dummy row added for debugging, in reality there is only one chip on the D8 board
+                #BX_phase_net = pd.concat([BX_phase_net, pd.DataFrame([new_chip])], ignore_index=True)
+
+                #Do not use append - has been deprecated
+                #BX_phase_net = BX_phase_net.append(new_chip, ignore_index=True)
+
+                BX_med = BX_phase_net.groupby(['chip', 'chan_num'])[['phase']].median()
+
+                print("List of indices after adding dummy row")
+                print(BX_med.index)
+
+                chip_val = BX_med.index.get_level_values('chip')
+
+                #===========================================Cutting for each chip and fitting and plotting the points and fit===================================
+                
+                for chip in chip_val.unique(): #Only the 0th entry of a MultiIndex since that corresponds to the chip
+
+                    fig, axes = plt.subplots(1,1,figsize=(16,9),sharey=False)
+                    axes.set_ylabel(f'Best phase from sampling scan')
+                    axes.set_xlabel(r'Number of channels injected in one half')
+                    axes.xaxis.grid(True)
+
+                    BX_fit_chip = BX_med[chip_val == chip]
+                    print("Cut chip array for fitting")
+                    print(BX_fit_chip)
+                    chan_num_val = BX_fit_chip.index.get_level_values('chan_num') #No need for 'unique' because they are already done when median is calculated
+
+                    axes.scatter( chan_num_val, BX_fit_chip['phase'], marker='o')
+                    popt, pcov = curve_fit(lambda x, A, t: A * np.exp(x * t), chan_num_val, BX_fit_chip['phase'], p0=[2,1])
+
+                    #popt, pcov = curve_fit(lambda x, A, t: A *x + t, chan_num_val, BX_fit_chip['phase'], p0=[0,10]) #Linear fit for debugging
+
+                    print("fit parameter values", popt[0],popt[1])
+                    print(type(popt))
+                    nestedConf = analysis_misc.set_key_dict(nestedConf,['high_range'],['chip_'+str(int(chip))],[popt.tolist()])
+
+                    axes.plot(chan_num_val,popt[0] * np.exp(chan_num_val * popt[1]))
+                    plt.savefig(f'{odir_plot}/Chip_%s_best_phase_fit.png'%(chip), format='png', bbox_inches='tight')      
+
+                #===============================================================================================================================================   
+
+            #==================================================================================================================================================
+
+            print(BX_med)
+            print(type(BX_med))
+            #print("Final data frame from all the runs")
+            #print(BX_phase_net)
+
+        return nestedConf        
+
+    #================================================================Mostly not to be used=======================================================================================
 
     def make_fit_dict(self,odir):
         odir_main = '/home/hgcal/Desktop/Tileboard_DAQ_GitLab_version_2024/DAQ_transactor_new/hexactrl-sw/hexactrl-script/data/TB3_D8_11/'
@@ -1088,9 +1356,10 @@ class overall_analyzer(analyzer):
             no_phase_chan = sampling_analyzer.channel_sampling_scan_internal_check("TB3_D8",injectedChannels,len(files),odir_current,process='int',subprocess='preamp',height_percent=0.1,config_file = config_file,fout = odir_current + "analysis_summary_new.yaml")
             print("List of channels excluded from phase calculation", no_phase_chan)
             #sampling_analyzer.determine_bestPhase(injectedChannels,odir, no_phase_chan)
-            (BX_current,bx_begin,phase_begin,calib_bx) = sampling_analyzer.calc_bestPhase(injectedChannels,odir_current,no_phase_chan)
+            #(BX_current,bx_begin,phase_begin,calib_bx) = sampling_analyzer.calc_bestPhase(injectedChannels,odir_current,no_phase_chan)
+            sampling_analyzer.calc_bestPhase(injectedChannels,odir_current,no_phase_chan)
             shift_cur = 0
-            print("Current list of phases for fitting",BX_current)
+            print("Current list of phases for fitting",BX_current) #,bx_begin,phase_begin,calib_bx
             for key_cur in BX_current.keys():
                 #This is just shifting back the overall pulse in a run if we find that it is shifted wrt the previous run(s)
                 #It is ok to use this for fitting, but for the final selection of the phase, we would not know which phase is 'right' anyway with such shifts
@@ -1122,7 +1391,7 @@ class overall_analyzer(analyzer):
 
 
     #This does not calculate the best phase (which is already calculated in the calc_bestPhase function above) but it writes either the best phase in case of low range to the yaml file, or just the fit parameters in case of high range to that yaml file
-    def determine_bestPhase(self,odir):
+    def determine_bestPhase(self,injectedChannels,odir,no_phase_chan):
         #,bx_begin,phase_begin,calib_bx
         try:
             with open(odir + "BX_fit.yaml",'r') as file:
@@ -1189,6 +1458,7 @@ class overall_analyzer(analyzer):
             yaml.dump(BX_phase_info,fout,sort_keys=False)
         '''
 
+    #==============================================================================================================================================================
 
 if __name__ == "__main__":
     
@@ -1222,11 +1492,29 @@ if __name__ == "__main__":
         sampling_analyzer.mergeData()
         #sampling_analyzer.pulse_width_pass("TB3_D8",injectedChannels,len(files),odir,height_percent=0.1,process='int',subprocess='preamp')
         #sampling_analyzer.chip_half("TB3_D8",injectedChannels,odir)
-        no_phase_chan = sampling_analyzer.channel_sampling_scan_internal_check("TB3_D8",injectedChannels,len(files),odir,process='int',subprocess='preamp',height_percent=0.1,config_file = config_file,fout = odir + "analysis_summary_new.yaml")
+        #no_phase_chan = sampling_analyzer.channel_sampling_scan_internal_check("TB3_D8",injectedChannels,len(files),odir,process='int',subprocess='preamp',height_percent=0.1,config_file = config_file,fout = odir + "analysis_summary_new.yaml")
         #print("List of channels excluded from phase calculation", no_phase_chan)
         #sampling_analyzer.determine_bestPhase(injectedChannels,odir, no_phase_chan)
         #(BX_1,bx_begin,phase_begin,calib_bx) = sampling_analyzer.calc_bestPhase(injectedChannels,odir,no_phase_chan)
+
+        odir_phase = '/home/hgcal/Desktop/kria/HGCROC3b/hexactrl-sw/hgcal_qc_hexactrl-script-cleanup/data/D8_8/'
         #'''
+        try:
+            with open(odir_phase + "best_phase_low_high.yaml",'r') as best_phase_file:
+                phase_yaml = yaml.safe_load(best_phase_file)
+                print("File already exists")
+                            
+        except FileNotFoundError:
+            with open(odir_phase + "best_phase_low_high.yaml",'w') as best_phase_file:
+                phase_yaml = dict()
+                print("First time creation of file")
+
+        phase_yaml = sampling_analyzer.get_med_phase(odir_phase,phase_yaml) 
+        print("Final low range or high range dict",phase_yaml)
+        with open(odir_phase + "best_phase_low_high.yaml",'w') as best_phase_file:
+            print(yaml.dump(phase_yaml,best_phase_file,sort_keys=False))
+
+        print("Best phase/fit parameters written to yaml file",odir_phase + "best_phase_low_high.yaml")
 
 
         '''
